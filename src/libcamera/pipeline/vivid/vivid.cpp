@@ -11,6 +11,7 @@
 #include <libcamera/control_ids.h>
 #include <libcamera/controls.h>
 #include <libcamera/formats.h>
+#include <libcamera/property_ids.h>
 
 #include "libcamera/internal/device_enumerator.h"
 #include "libcamera/internal/log.h"
@@ -336,7 +337,7 @@ int VividCameraData::init()
 
 	video_->bufferReady.connect(this, &VividCameraData::bufferReady);
 
-	/* Initialise the supported controls. */
+	/* Initialise the supported controls and properties. */
 	const ControlInfoMap &controls = video_->controls();
 	ControlInfoMap::Map ctrls;
 
@@ -365,6 +366,9 @@ int VividCameraData::init()
 	}
 
 	controlInfo_ = std::move(ctrls);
+
+	properties_.set(properties::Location, properties::CameraLocationExternal);
+	properties_.set(properties::Model, "Virtual Video Device");
 
 	return 0;
 }
