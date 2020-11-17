@@ -147,7 +147,11 @@ bool DelayedControls::queue(const ControlList &controls)
 
 	/* Update with new controls. */
 	for (const auto &control : controls) {
-		const ControlId *id = device_->controls().idmap().at(control.first);
+		const ControlIdMap &idmap = device_->controls().idmap();
+		if (idmap.find(control.first) == idmap.end())
+			return false;
+
+		const ControlId *id = idmap.at(control.first);
 
 		if (delays_.find(id) == delays_.end())
 			return false;
