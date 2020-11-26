@@ -149,10 +149,11 @@ void IPAIPU3::processEvent(const IPAOperationData &event)
 		unsigned int frame = event.data[0];
 		unsigned int bufferId = event.data[1];
 
-		const ipu3_uapi_stats_3a *stats =
-			static_cast<ipu3_uapi_stats_3a *>(buffersMemory_[bufferId]);
+		struct ipu3_uapi_stats_3a stats;
+		LOG(IPAIPU3, Debug) << "video stat buffer " << bufferId;
+		memcpy(&stats, buffersMemory_[5], sizeof(stats));
 
-		parseStatistics(frame, stats);
+		parseStatistics(frame, &stats);
 		break;
 	}
 	case IPU3_IPA_EVENT_FILL_PARAMS: {
@@ -196,6 +197,7 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 	/* \todo React to statistics and update internal state machine. */
 	/* \todo Add meta-data information to ctrls. */
 
+	LOG(IPAIPU3, Debug) << "stats: " << stats->stats_3a_status.ae_en;
 	IPAOperationData op;
 	op.operation = IPU3_IPA_ACTION_METADATA_READY;
 	op.controls.push_back(ctrls);
