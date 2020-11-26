@@ -172,13 +172,43 @@ void IPAIPU3::processEvent(const IPAOperationData &event)
 	}
 }
 
+#define X 0	/*  Don't care value */
+const struct ipu3_uapi_bnr_static_config imgu_css_bnr_defaults = {
+	{ 16, 16, 16, 16 },			/* wb_gains */
+	{ 2, 1, 1, 2 },			/* wb_gains_thr */
+	{ 0, X, 8, 6, X, 14 },			/* thr_coeffs */
+	{ 0, 0, 0, 0 },				/* thr_ctrl_shd */
+	{ -128, X, -128, X },			/* opt_center */
+	{					/* lut */
+		{ 17, 23, 28, 32, 36, 39, 42, 45,
+		  48, 51, 53, 55, 58, 60, 62, 64,
+		  66, 68, 70, 72, 73, 75, 77, 78,
+		  80, 82, 83, 85, 86, 88, 89, 90 }
+	},
+	{ 4, X, 1, 8, X, 8, X, 8, X },		/* bp_ctrl */
+	{ 8, 4, 4, X, 8, X, 1, 1, 1, 1, X },	/* dn_detect_ctrl */
+	1920,
+	{2663424, 1498176},
+};
+
 void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params,
 			 [[maybe_unused]] const ControlList &controls)
 {
 	/* Prepare parameters buffer. */
 	memset(params, 0, sizeof(*params));
 
-	/* \todo Fill in parameters buffer. */
+	// Activate wb gain
+	params->use.acc_bnr = 1;
+	params->acc_param.bnr = imgu_css_bnr_defaults;
+	// daylight defaults... somehow :-)
+	params->acc_param.bnr.wb_gains.gr=8191;
+	params->acc_param.bnr.wb_gains.r=16384*1.2;
+	params->acc_param.bnr.wb_gains.b=16384*0.8;
+	params->acc_param.bnr.wb_gains.gb=params->acc_param.bnr.wb_gains.gr;
+
+	if (frame%30 == 0)
+		LOG(IPAIPU3, Error) << "["<< frame << "]" << " Gains: R: " << params->acc_param.bnr.wb_gains.r << " B: " << params->acc_param.bnr.wb_gains.b
+			<< " G: " << params->acc_param.bnr.wb_gains.gr;
 
 	IPAOperationData op;
 	op.operation = IPU3_IPA_ACTION_PARAM_FILLED;
