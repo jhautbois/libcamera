@@ -89,15 +89,15 @@ void IPAIPU3::configure([[maybe_unused]] const CameraSensorInfo &info,
 		return;
 	}
 
+	minExposure_ = std::max<uint32_t>(itExp->second.min().get<int32_t>(), 1);
+	maxExposure_ = itExp->second.max().get<int32_t>();
+	exposure_ = maxExposure_;
+
 	const auto itGain = ctrls_.find(V4L2_CID_ANALOGUE_GAIN);
 	if (itGain == ctrls_.end()) {
 		LOG(IPAIPU3, Error) << "Can't find gain control";
 		return;
 	}
-
-	minExposure_ = std::max<uint32_t>(itExp->second.min().get<int32_t>(), 1);
-	maxExposure_ = itExp->second.max().get<int32_t>();
-	exposure_ = maxExposure_;
 
 	minGain_ = std::max<uint32_t>(itGain->second.min().get<int32_t>(), 1);
 	maxGain_ = itGain->second.max().get<int32_t>();
