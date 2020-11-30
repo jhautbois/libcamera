@@ -91,9 +91,8 @@ void IPAIPU3::configure([[maybe_unused]] const CameraSensorInfo &info,
 
 	minExposure_ = std::max<uint32_t>(itExp->second.min().get<int32_t>(), 1);
 	maxExposure_ = itExp->second.max().get<int32_t>();
-	exposure_ = maxExposure_;
 
-	const auto itGain = ctrls_.find(V4L2_CID_ANALOGUE_GAIN);
+	const auto itGain = ctrls_.find(V4L2_CID_GAIN);
 	if (itGain == ctrls_.end()) {
 		LOG(IPAIPU3, Error) << "Can't find gain control";
 		return;
@@ -101,7 +100,10 @@ void IPAIPU3::configure([[maybe_unused]] const CameraSensorInfo &info,
 
 	minGain_ = std::max<uint32_t>(itGain->second.min().get<int32_t>(), 1);
 	maxGain_ = itGain->second.max().get<int32_t>();
-	gain_ = maxGain_;
+
+	ControlList ctrls(ctrls_);
+//	exposure_ = ctrls.get(V4L2_CID_EXPOSURE).get<int32_t>();
+//	gain_ = ctrls.get(V4L2_CID_GAIN).get<int32_t>();
 
 	setControls(0);
 }
@@ -150,8 +152,7 @@ void IPAIPU3::processEvent(const IPAOperationData &event)
 		unsigned int bufferId = event.data[1];
 
 		struct ipu3_uapi_stats_3a stats;
-		LOG(IPAIPU3, Debug) << "video stat buffer " << bufferId;
-		memcpy(&stats, buffersMemory_[5], sizeof(stats));
+		memcpy(&stats, buffersMemory_[bufferId], sizeof(stats));
 
 		parseStatistics(frame, &stats);
 		break;
@@ -191,6 +192,51 @@ const struct ipu3_uapi_bnr_static_config imgu_css_bnr_defaults = {
 	{2663424, 1498176},
 };
 
+const struct ipu3_uapi_gamma_corr_lut imgu_css_gamma_lut = { {
+	32, 33, 35, 55, 80, 143, 159, 175, 191, 207, 223, 239, 255, 271, 287,
+	303, 319, 335, 351, 367, 383, 399, 415, 431, 447, 463, 479, 495, 511,
+	527, 543, 559, 575, 591, 607, 623, 639, 655, 671, 687, 703, 719, 735,
+	751, 767, 783, 799, 815, 831, 847, 863, 879, 895, 911, 927, 943, 959,
+	975, 991, 1007, 1023, 1039, 1055, 1071, 1087, 1103, 1119, 1135, 1151,
+	1167, 1183, 1199, 1215, 1231, 1247, 1263, 1279, 1295, 1311, 1327, 1343,
+	1359, 1375, 1391, 1407, 1423, 1439, 1455, 1471, 1487, 1503, 1519, 1535,
+	1551, 1567, 1583, 1599, 1615, 1631, 1647, 1663, 1679, 1695, 1711, 1727,
+	1743, 1759, 1775, 1791, 1807, 1823, 1839, 1855, 1871, 1887, 1903, 1919,
+	1935, 1951, 1967, 1983, 1999, 2015, 2031, 2047, 2063, 2079, 2095, 2111,
+	2143, 2175, 2207, 2239, 2271, 2303, 2335, 2367, 2399, 2431, 2463, 2495,
+	2527, 2559, 2591, 2623, 2655, 2687, 2719, 2751, 2783, 2815, 2847, 2879,
+	2911, 2943, 2975, 3007, 3039, 3071, 3103, 3135, 3167, 3199, 3231, 3263,
+	3295, 3327, 3359, 3391, 3423, 3455, 3487, 3519, 3551, 3583, 3615, 3647,
+	3679, 3711, 3743, 3775, 3807, 3839, 3871, 3903, 3935, 3967, 3999, 4031,
+	4063, 4095, 4127, 4159, 4223, 4287, 4351, 4415, 4479, 4543, 4607, 4671,
+	4735, 4799, 4863, 4927, 4991, 5055, 5119, 5183, 5247, 5311, 5375, 5439,
+	5503, 5567, 5631, 5695, 5759, 5823, 5887, 5951, 6015, 6079, 6143, 6207,
+	6271, 6335, 6399, 6463, 6527, 6591, 6655, 6719, 6783, 6847, 6911, 6975,
+	7039, 7103, 7167, 7231, 7295, 7359, 7423, 7487, 7551, 7615, 7679, 7743,
+	7807, 7871, 7935, 8191, 8191, 8191, 8191
+} };
+
+const struct ipu3_uapi_ae_grid_config imgu_css_ae_grid_defaults = {
+	.width = 16,
+	.height = 16,
+	.block_width_log2 = 7,
+	.block_height_log2 = 7,
+	.reserved0 = 0,
+	.ae_en = 1,
+	.rst_hist_array = 0,
+	.done_rst_hist_array = 0,
+	.x_start = 632,
+	.y_start = 352,
+	.x_end = 4096+648,
+	.y_end = 4096+368,
+};
+
+/* settings for Auto Exposure color correction matrix */
+const struct ipu3_uapi_ae_ccm imgu_css_ae_ccm_defaults = {
+	256, 256, 256, 256,		/* gain_gr/r/b/gb */
+	.mat = { 128, 0, 0, 0, 0, 128, 0, 0, 0, 0, 128, 0, 0, 0, 0, 128 },
+};
+
 void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params,
 			 [[maybe_unused]] const ControlList &controls)
 {
@@ -206,9 +252,20 @@ void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params,
 	params->acc_param.bnr.wb_gains.b=16384*0.8;
 	params->acc_param.bnr.wb_gains.gb=params->acc_param.bnr.wb_gains.gr;
 
-	if (frame%30 == 0)
-		LOG(IPAIPU3, Error) << "["<< frame << "]" << " Gains: R: " << params->acc_param.bnr.wb_gains.r << " B: " << params->acc_param.bnr.wb_gains.b
-			<< " G: " << params->acc_param.bnr.wb_gains.gr;
+	// Correct gamma
+	params->use.acc_gamma = 0;
+	params->acc_param.gamma.gc_ctrl.enable = 1;
+	params->acc_param.gamma.gc_lut = imgu_css_gamma_lut;
+
+	static const struct ipu3_uapi_ae_weight_elem
+			weight_def = { 1, 1, 1, 1, 1, 1, 1, 1 };
+	params->use.acc_ae = 1;
+	params->acc_param.ae.grid_cfg = imgu_css_ae_grid_defaults;
+	if (frame == 0)
+		params->acc_param.ae.grid_cfg.rst_hist_array = 1;
+	params->acc_param.ae.ae_ccm = imgu_css_ae_ccm_defaults;
+	for (int i = 0; i < IPU3_UAPI_AE_WEIGHTS; i++)
+		params->acc_param.ae.weights[i] = weight_def;
 
 	IPAOperationData op;
 	op.operation = IPU3_IPA_ACTION_PARAM_FILLED;
@@ -227,7 +284,9 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 	/* \todo React to statistics and update internal state machine. */
 	/* \todo Add meta-data information to ctrls. */
 
-	LOG(IPAIPU3, Debug) << "stats: " << stats->stats_3a_status.ae_en;
+	if (stats->stats_3a_status.ae_en)
+		for (int i = 0 ; i < IPU3_UAPI_AE_BINS * IPU3_UAPI_AE_COLORS; i++)
+			LOG(IPAIPU3, Debug) << "stat AE [" << i << "]: " << stats->ae_raw_buffer[0].buff.vals[i];
 	IPAOperationData op;
 	op.operation = IPU3_IPA_ACTION_METADATA_READY;
 	op.controls.push_back(ctrls);
@@ -241,8 +300,9 @@ void IPAIPU3::setControls(unsigned int frame)
 	op.operation = IPU3_IPA_ACTION_SET_SENSOR_CONTROLS;
 
 	ControlList ctrls(ctrls_);
+
 	ctrls.set(V4L2_CID_EXPOSURE, static_cast<int32_t>(exposure_));
-	ctrls.set(V4L2_CID_ANALOGUE_GAIN, static_cast<int32_t>(gain_));
+	ctrls.set(V4L2_CID_GAIN, static_cast<int32_t>(gain_));
 	op.controls.push_back(ctrls);
 
 	queueFrameAction.emit(frame, op);
