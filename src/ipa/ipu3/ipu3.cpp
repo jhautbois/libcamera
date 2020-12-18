@@ -11,6 +11,8 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include <linux/intel-ipu3.h>
 #include <linux/v4l2-controls.h>
@@ -102,8 +104,8 @@ void IPAIPU3::configure([[maybe_unused]] const CameraSensorInfo &info,
 	maxGain_ = itGain->second.max().get<int32_t>();
 
 	ControlList ctrls(ctrls_);
-//	exposure_ = ctrls.get(V4L2_CID_EXPOSURE).get<int32_t>();
-//	gain_ = ctrls.get(V4L2_CID_GAIN).get<int32_t>();
+	exposure_ = minExposure_;
+	gain_ = minGain_;
 
 	setControls(0);
 }
@@ -176,7 +178,7 @@ void IPAIPU3::processEvent(const IPAOperationData &event)
 #define X 0	/*  Don't care value */
 const struct ipu3_uapi_bnr_static_config imgu_css_bnr_defaults = {
 	{ 16, 16, 16, 16 },			/* wb_gains */
-	{ 2, 1, 1, 2 },			/* wb_gains_thr */
+	{ 255, 255, 255, 255 },			/* wb_gains_thr */
 	{ 0, X, 8, 6, X, 14 },			/* thr_coeffs */
 	{ 0, 0, 0, 0 },				/* thr_ctrl_shd */
 	{ -128, X, -128, X },			/* opt_center */
@@ -215,7 +217,7 @@ const struct ipu3_uapi_gamma_corr_lut imgu_css_gamma_lut = { {
 	7039, 7103, 7167, 7231, 7295, 7359, 7423, 7487, 7551, 7615, 7679, 7743,
 	7807, 7871, 7935, 8191, 8191, 8191, 8191
 } };
-
+#if 1
 const struct ipu3_uapi_ae_grid_config imgu_css_ae_grid_defaults = {
 	.width = 16,
 	.height = 16,
@@ -230,11 +232,26 @@ const struct ipu3_uapi_ae_grid_config imgu_css_ae_grid_defaults = {
 	.x_end = 4096+648,
 	.y_end = 4096+368,
 };
-
 /* settings for Auto Exposure color correction matrix */
 const struct ipu3_uapi_ae_ccm imgu_css_ae_ccm_defaults = {
 	256, 256, 256, 256,		/* gain_gr/r/b/gb */
 	.mat = { 128, 0, 0, 0, 0, 128, 0, 0, 0, 0, 128, 0, 0, 0, 0, 128 },
+};
+
+#endif
+
+/* settings for Auto White Balance */
+const struct ipu3_uapi_awb_config_s imgu_css_awb_defaults = {
+	0, 1, 1, 0|	/* rgbs_thr_gr/r/gb/b */
+	IPU3_UAPI_AWB_RGBS_THR_B_EN | IPU3_UAPI_AWB_RGBS_THR_B_INCL_SAT,
+	.grid = {
+		.width = 16,
+		.height = 16,
+		.block_width_log2 = 3,
+		.block_height_log2 = 3,
+		.x_start = 16,
+		.y_start = 0,
+	},
 };
 
 void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params,
@@ -243,30 +260,44 @@ void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params,
 	/* Prepare parameters buffer. */
 	memset(params, 0, sizeof(*params));
 
+	params->use.acc_awb = 1;
+	params->acc_param.awb.config = imgu_css_awb_defaults;
+	params->acc_param.awb.config.rgbs_thr_gr = frame;
+	params->acc_param.awb.config.rgbs_thr_r = frame;
+	params->acc_param.awb.config.rgbs_thr_gb = frame;
+	params->acc_param.awb.config.rgbs_thr_b = (frame) | IPU3_UAPI_AWB_RGBS_THR_B_EN | IPU3_UAPI_AWB_RGBS_THR_B_INCL_SAT;
+	params->acc_param.awb.config.grid.x_start = frame;
+	LOG(IPAIPU3, Error) << "x_start: " << (int)params->acc_param.awb.config.grid.x_start;
+
 	// Activate wb gain
-	params->use.acc_bnr = 1;
+	params->use.acc_bnr = 0;
 	params->acc_param.bnr = imgu_css_bnr_defaults;
 	// daylight defaults... somehow :-)
-	params->acc_param.bnr.wb_gains.gr=8191;
-	params->acc_param.bnr.wb_gains.r=16384*1.2;
-	params->acc_param.bnr.wb_gains.b=16384*0.8;
-	params->acc_param.bnr.wb_gains.gb=params->acc_param.bnr.wb_gains.gr;
+	//params->acc_param.bnr.wb_gains.gr=8191;
+	//params->acc_param.bnr.wb_gains.r=16384*1.2;
+	//params->acc_param.bnr.wb_gains.b=16384*0.8;
+	//params->acc_param.bnr.wb_gains.gb=params->acc_param.bnr.wb_gains.gr;
 
 	// Correct gamma
 	params->use.acc_gamma = 0;
 	params->acc_param.gamma.gc_ctrl.enable = 1;
 	params->acc_param.gamma.gc_lut = imgu_css_gamma_lut;
-
+#if 1
 	static const struct ipu3_uapi_ae_weight_elem
 			weight_def = { 1, 1, 1, 1, 1, 1, 1, 1 };
-	params->use.acc_ae = 1;
-	params->acc_param.ae.grid_cfg = imgu_css_ae_grid_defaults;
-	if (frame == 0)
+	params->use.acc_ae = 0;
+	if (frame == 0) {
 		params->acc_param.ae.grid_cfg.rst_hist_array = 1;
+		params->acc_param.ae.grid_cfg.done_rst_hist_array = 1;
+	} else {
+		params->acc_param.ae.grid_cfg.rst_hist_array = 0;
+		params->acc_param.ae.grid_cfg.done_rst_hist_array = 1;
+	}
+	params->acc_param.ae.grid_cfg = imgu_css_ae_grid_defaults;
 	params->acc_param.ae.ae_ccm = imgu_css_ae_ccm_defaults;
 	for (int i = 0; i < IPU3_UAPI_AE_WEIGHTS; i++)
 		params->acc_param.ae.weights[i] = weight_def;
-
+#endif
 	IPAOperationData op;
 	op.operation = IPU3_IPA_ACTION_PARAM_FILLED;
 
@@ -284,9 +315,44 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 	/* \todo React to statistics and update internal state machine. */
 	/* \todo Add meta-data information to ctrls. */
 
-	if (stats->stats_3a_status.ae_en)
-		for (int i = 0 ; i < IPU3_UAPI_AE_BINS * IPU3_UAPI_AE_COLORS; i++)
-			LOG(IPAIPU3, Debug) << "stat AE [" << i << "]: " << stats->ae_raw_buffer[0].buff.vals[i];
+//	LOG(IPAIPU3, Error) << "awb_en: " << stats->stats_3a_status.awb_en;
+//	LOG(IPAIPU3, Error) << "ae_en: " << stats->stats_3a_status.ae_en;
+//	LOG(IPAIPU3, Error) << "af_en: " << stats->stats_3a_status.af_en;
+//	LOG(IPAIPU3, Error) << "awb_fr_en: " << stats->stats_3a_status.awb_en;
+
+	if (frame%8 == 0) {
+		LOG(IPAIPU3, Error) << "x_start: " << (int)stats->stats_4a_config.awb_config.grid.x_start;
+		LOG(IPAIPU3, Error) << "rgbs_thr_gr: " << (int)stats->stats_4a_config.awb_config.rgbs_thr_gr;
+		LOG(IPAIPU3, Error) << "rgbs_thr_r: " << (int)stats->stats_4a_config.awb_config.rgbs_thr_r;
+		LOG(IPAIPU3, Error) << "rgbs_thr_gb: " << (int)stats->stats_4a_config.awb_config.rgbs_thr_gb;
+		LOG(IPAIPU3, Error) << "rgbs_thr_b: " << (int)stats->stats_4a_config.awb_config.rgbs_thr_b;
+	}
+		std::string filename = "/tmp/stats_frame30.bin";
+		int fd = open(filename.c_str(), O_CREAT | O_WRONLY | O_APPEND,
+				S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+		::write(fd, &stats->awb_raw_buffer.meta_data[0], IPU3_UAPI_AWB_MAX_BUFFER_SIZE);
+		close(fd);
+	if (frame == 0) {
+		LOG(IPAIPU3, Error) << "width: " << (int)stats->stats_4a_config.awb_config.grid.width;
+		LOG(IPAIPU3, Error) << "height: " << (int)stats->stats_4a_config.awb_config.grid.height;
+		LOG(IPAIPU3, Error) << "block_width_log2: " << (int)stats->stats_4a_config.awb_config.grid.block_width_log2;
+		LOG(IPAIPU3, Error) << "block_height_log2: " << (int)stats->stats_4a_config.awb_config.grid.block_height_log2;
+		LOG(IPAIPU3, Error) << "height_per_slice: " << (int)stats->stats_4a_config.awb_config.grid.height_per_slice;
+		LOG(IPAIPU3, Error) << "x_start: " << (int)stats->stats_4a_config.awb_config.grid.x_start;
+		LOG(IPAIPU3, Error) << "y_start: " << (int)stats->stats_4a_config.awb_config.grid.y_start;
+		LOG(IPAIPU3, Error) << "x_end: " << (int)stats->stats_4a_config.awb_config.grid.x_end;
+		LOG(IPAIPU3, Error) << "y_end: " << (int)stats->stats_4a_config.awb_config.grid.y_end;
+	}
+#if 0
+		if (stats->stats_3a_status.awb_en)
+			for (int i = 0 ; i < IPU3_UAPI_AWB_MAX_BUFFER_SIZE; i++)
+				LOG(IPAIPU3, Error) << "stat AWB [" << i << "]: " << (int)(stats->awb_raw_buffer.meta_data[i]);
+
+		if (stats->stats_3a_status.ae_en)
+			for (int i = 0 ; i < IPU3_UAPI_AE_BINS * IPU3_UAPI_AE_COLORS; i++)
+				LOG(IPAIPU3, Error) << "stat AE [" << i << "]: " << stats->ae_raw_buffer[0].buff.vals[i];
+#endif
+	//}
 	IPAOperationData op;
 	op.operation = IPU3_IPA_ACTION_METADATA_READY;
 	op.controls.push_back(ctrls);
@@ -301,8 +367,12 @@ void IPAIPU3::setControls(unsigned int frame)
 
 	ControlList ctrls(ctrls_);
 
-	ctrls.set(V4L2_CID_EXPOSURE, static_cast<int32_t>(exposure_));
-	ctrls.set(V4L2_CID_GAIN, static_cast<int32_t>(gain_));
+	if (frame == 0) {
+		exposure_ = 35000*2;
+		ctrls.set(V4L2_CID_EXPOSURE, static_cast<int32_t>(exposure_));
+		gain_ = 128;
+		ctrls.set(V4L2_CID_GAIN, static_cast<int32_t>(gain_));
+	}
 	op.controls.push_back(ctrls);
 
 	queueFrameAction.emit(frame, op);

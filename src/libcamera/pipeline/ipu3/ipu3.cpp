@@ -6,9 +6,11 @@
  */
 
 #include <algorithm>
+#include <fcntl.h>
 #include <iomanip>
 #include <memory>
 #include <queue>
+#include <unistd.h>
 #include <vector>
 
 #include <libcamera/camera.h>
@@ -18,6 +20,7 @@
 #include <libcamera/request.h>
 #include <libcamera/stream.h>
 
+#include "libcamera/internal/buffer.h"
 #include "libcamera/internal/camera_sensor.h"
 #include "libcamera/internal/device_enumerator.h"
 #include "libcamera/internal/ipa_manager.h"
@@ -73,8 +76,11 @@ public:
 	DelayedControls *delayedCtrls_;
 	std::unique_ptr<IPU3Frames> frameInfo_;
 
+	void *_patternBuffer;
+
 private:
 	void actOnIpa(unsigned int id, const IPAOperationData &op);
+	void generatePattern(void *address, uint16_t red, uint16_t green, uint16_t blue);
 };
 
 class IPU3CameraConfiguration : public CameraConfiguration
@@ -911,6 +917,9 @@ int IPU3CameraData::loadIPA()
 
 	frameInfo_ = std::make_unique<IPU3Frames>(pipe_, ipa_.get());
 
+	_patternBuffer = new uint8_t[3328*1944];
+	if (_patternBuffer != nullptr)
+		generatePattern(_patternBuffer, 0x21c, 0x21c, 0x21c);
 	return 0;
 }
 
@@ -972,6 +981,79 @@ void IPU3CameraData::imguOutputBufferReady(FrameBuffer *buffer)
 	frameInfo_->tryComplete(info);
 }
 
+#if 0
+static uint16_t mask(uint16_t num_bits)
+{
+    if( num_bits < 16)
+        return (1UL << num_bits) - 1;
+    else
+        return -1;
+}
+#endif
+
+#if 1
+static void generateStride(uint8_t *addr, uint16_t pixel1, uint16_t pixel2)
+{
+	for (uint8_t h = 0 ; h < 6 ; h++) {
+			*addr++ = (pixel1 & 0xff);
+			*addr++ = ((pixel2 << 2) & 0xff) | (pixel1 >> 8);
+			*addr++ = ((pixel1 << 4) & 0xf0) | (pixel2 >> 6);
+			*addr++ = ((pixel2 & 0x03) << 6) | (pixel1 >> 4);
+			*addr++ = (pixel2 & 0x3ff) >> 2;
+	}
+	*addr++ = pixel1 & 0xff;
+	*addr++ = pixel1 >> 8;
+}
+
+#endif
+void IPU3CameraData::generatePattern(void *address, uint16_t red, uint16_t green, uint16_t blue)
+{
+	uint32_t width = 3328;
+	uint32_t height = 1944;
+	uint8_t *addr = (uint8_t *)address;
+	blue = 0;
+	green = 0;
+	red = 0x3ff;
+	// For each pair of lines
+	for (uint32_t j = 0 ; j < height ; j+=2) {
+		// For each 64 bytes on one line
+		//blue = (j * 1024) / height;
+		//green = (j * 1024) / height; 
+		//red = (j * 1024) / height;
+		for (uint32_t i = 0 ; i < width ; i+=64) {
+			//blue = (i * 1024)/width;
+			//green= (i * 1024)/width;
+			generateStride(addr, blue, green);
+			addr+=32;
+			//blue = ((i+32) * 1024)/width;
+			//green= ((i+32) * 1024)/width;
+			generateStride(addr, blue, green);
+			generateStride(addr, green, blue);
+			addr+=32;
+		}
+		//blue = (j * 1024) / height;
+		//green = ((j+1) * 1024) / height; 
+		//red = (j * 1024) / height;
+		for (uint32_t i = 0 ; i < width ; i+=64) {
+			//green = (i * 1024)/width;
+			//red = (i * 1024)/width;
+			if (i<16)
+				red = 0;
+			else
+				red=0x3ff;
+			generateStride(addr, green, red);
+			addr+=32;
+			//red = ((i+32) * 1024)/width;
+			//green= ((i+32) * 1024)/width;
+			generateStride(addr, red, green);
+			addr+=32;
+		}
+	}
+	int out_fd = open("/tmp/pattern_BGGR_IPU3_gen.bin", O_WRONLY | O_TRUNC | O_CREAT, 0644);
+	write(out_fd, address, 6469632);
+	close(out_fd);
+}
+
 /**
  * \brief Handle buffers completion at the CIO2 output
  * \param[in] buffer The completed buffer
@@ -1007,6 +1089,22 @@ void IPU3CameraData::cio2BufferReady(FrameBuffer *buffer)
 	if (!info->paramFilled)
 		LOG(IPU3, Info)
 			<< "Parameters not ready on time for id " << info->id;
+
+	for (const FrameBuffer::Plane &plane : buffer->planes()) {
+		void *address = mmap(nullptr, plane.length, PROT_WRITE,
+					     MAP_SHARED, plane.fd.fd(), 0);
+		if (address == MAP_FAILED) {
+			LOG(IPU3, Error) << "Failed to mmap plane";
+			break;
+		}
+
+		if (_patternBuffer != nullptr)
+			memcpy(address, _patternBuffer, 3328*1944);
+		int out_fd = open("/tmp/pattern_BGGR_IPU3_mem.bin", O_WRONLY | O_TRUNC | O_CREAT, 0644);
+		write(out_fd, address, plane.length);
+		close(out_fd);
+		munmap(address, plane.length);
+	}
 
 	imgu_->input_->queueBuffer(buffer);
 }
