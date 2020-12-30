@@ -1012,35 +1012,41 @@ void IPU3CameraData::generatePattern(void *address, uint16_t red, uint16_t green
 	uint32_t height = 1944;
 	uint8_t *addr = (uint8_t *)address;
 	blue = 0;
-	green = 0;
-	red = 0x3ff;
+	red = 0;
 	// For each pair of lines
 	for (uint32_t j = 0 ; j < height ; j+=2) {
 		// For each 64 bytes on one line
 		//blue = (j * 1024) / height;
 		//green = (j * 1024) / height; 
 		//red = (j * 1024) / height;
+		if (j % 4 == 0) {
+			red = 0;
+			blue = 0x3ff;
+		} else {
+			red = 0;
+			blue = 0;
+		}
+		green = 0x0;
+		//	LOG(IPU3, Error) << j <<": " << red;
 		for (uint32_t i = 0 ; i < width ; i+=64) {
 			//blue = (i * 1024)/width;
 			//green= (i * 1024)/width;
+			if (i >= width / 2)
+				blue = 0;
 			generateStride(addr, blue, green);
 			addr+=32;
 			//blue = ((i+32) * 1024)/width;
 			//green= ((i+32) * 1024)/width;
-			generateStride(addr, blue, green);
 			generateStride(addr, green, blue);
 			addr+=32;
 		}
-		//blue = (j * 1024) / height;
+		green = 0x0;
+		//blue = ((j+1) * 1024) / height;
 		//green = ((j+1) * 1024) / height; 
-		//red = (j * 1024) / height;
+		//red = ((j+1) * 1024) / height;
 		for (uint32_t i = 0 ; i < width ; i+=64) {
 			//green = (i * 1024)/width;
 			//red = (i * 1024)/width;
-			if (i<16)
-				red = 0;
-			else
-				red=0x3ff;
 			generateStride(addr, green, red);
 			addr+=32;
 			//red = ((i+32) * 1024)/width;
@@ -1090,6 +1096,7 @@ void IPU3CameraData::cio2BufferReady(FrameBuffer *buffer)
 		LOG(IPU3, Info)
 			<< "Parameters not ready on time for id " << info->id;
 
+#if 0
 	for (const FrameBuffer::Plane &plane : buffer->planes()) {
 		void *address = mmap(nullptr, plane.length, PROT_WRITE,
 					     MAP_SHARED, plane.fd.fd(), 0);
@@ -1105,7 +1112,7 @@ void IPU3CameraData::cio2BufferReady(FrameBuffer *buffer)
 		close(out_fd);
 		munmap(address, plane.length);
 	}
-
+#endif
 	imgu_->input_->queueBuffer(buffer);
 }
 

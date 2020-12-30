@@ -513,7 +513,7 @@ DelayedControls *CameraSensor::delayedContols()
 		 * the Raspberry Pi and listed as generic values.
 		 */
 		std::unordered_map<uint32_t, unsigned int> delays = {
-			{ V4L2_CID_GAIN, 1 },
+			{ V4L2_CID_DIGITAL_GAIN, 1 },
 			{ V4L2_CID_EXPOSURE, 2 },
 		};
 
