@@ -55,6 +55,9 @@ private:
 	void fillParams(unsigned int frame, ipu3_uapi_params *params,
 			const ControlList &controls);
 
+	void calculateWBGains(Rectangle roi,
+			const ipu3_uapi_stats_3a *stats);
+
 	void parseStatistics(unsigned int frame,
 			     const ipu3_uapi_stats_3a *stats);
 
@@ -73,6 +76,7 @@ private:
 	uint32_t minGain_;
 	uint32_t maxGain_;
 	uint16_t wbGains_[4];
+	uint8_t	rst_ae_hist_;
 };
 
 void IPAIPU3::configure([[maybe_unused]] const CameraSensorInfo &info,
@@ -109,6 +113,8 @@ void IPAIPU3::configure([[maybe_unused]] const CameraSensorInfo &info,
 	gain_ = minGain_;
 
 	memset(wbGains_, 0, sizeof(wbGains_));
+	rst_ae_hist_ = 1;
+
 	setControls(0);
 }
 
@@ -251,6 +257,8 @@ void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params,
 	params->use.acc_ae = 1;
 	params->acc_param.ae.grid_cfg = imgu_css_ae_grid_defaults;
 
+	params->acc_param.ae.grid_cfg.rst_hist_array = rst_ae_hist_;
+
 	params->acc_param.ae.ae_ccm = imgu_css_ae_ccm_defaults;
 	for (int i = 0; i < IPU3_UAPI_AE_WEIGHTS; i++)
 		params->acc_param.ae.weights[i] = weight_def;
@@ -270,6 +278,37 @@ void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params,
 	setControls(frame);
 }
 
+void IPAIPU3::calculateWBGains(Rectangle roi, const ipu3_uapi_stats_3a *stats)
+{
+	float Gr=0, R=0, B=0, Gb=0;
+	Point topleft = roi.topLeft();
+	uint32_t startY = (topleft.y / 16) * 160 * 8;
+	uint32_t startX = (topleft.x / 8) * 8;
+	uint32_t endX = startX + (roi.size().width / 8);
+
+	for (uint32_t j = (topleft.y / 16) ; j < roi.size().height / 16 ; j++) {
+		for (uint32_t i=startX+startY ; i < endX+startY ; i+=8) {
+			Gr += stats->awb_raw_buffer.meta_data[i];
+			R += stats->awb_raw_buffer.meta_data[i+1];
+			B += stats->awb_raw_buffer.meta_data[i+2];
+			Gb += stats->awb_raw_buffer.meta_data[i+3];
+		}
+	}
+	Gr /= (1280*45)/8;
+	R /= (1280*45)/8;
+	B /= (1280*45)/8;
+	Gb /= (1280*45)/8;
+	
+	float G = (Gr+Gb)/2;
+
+	gain_ = 16*(64/G);
+
+	wbGains_[0] = 8192*(R/Gr);
+	wbGains_[1] = 8192*(G/R);
+	wbGains_[2] = 8192*(G/B);
+	wbGains_[3] = 8192*(B/Gb);
+}
+
 void IPAIPU3::parseStatistics(unsigned int frame,
 			      [[maybe_unused]] const ipu3_uapi_stats_3a *stats)
 {
@@ -287,38 +326,40 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 		::write(fd, &stats->awb_raw_buffer.meta_data[0], IPU3_UAPI_AWB_MAX_BUFFER_SIZE);
 		close(fd);
 	}
-	
-	if (stats->stats_3a_status.ae_en) {
-		LOG(IPAIPU3, Error) << "Write AE bins";
-		std::string filename = "/tmp/stats_ae.bin";
-		int fd = open(filename.c_str(), O_CREAT | O_WRONLY | O_APPEND,
-                                S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
-		::write(fd, &stats->ae_raw_buffer[0].buff.vals[0], IPU3_UAPI_AE_BINS * IPU3_UAPI_AE_COLORS);
-		::write(fd, &stats->ae_raw_buffer[1].buff.vals[0], IPU3_UAPI_AE_BINS * IPU3_UAPI_AE_COLORS);
-		close(fd);
+
+	if (stats->stats_4a_config.ae_grd_config.done_rst_hist_array) {
+		if (frame %8 == 0) {
+			rst_ae_hist_ = 1;
+	//		LOG(IPAIPU3, Error) << frame << ": done bit set => reset hist";
+		} else {
+			rst_ae_hist_ = 0;
+	//		LOG(IPAIPU3, Error) << frame << ": done bit set but don't reset hist";
+		}
+	} else {
+		if (frame %8 == 0) {
+			rst_ae_hist_ = 1;
+			//if (stats->stats_3a_status.ae_en) {
+	//			LOG(IPAIPU3, Error) << "Write AE bins";
+				std::string filename = "/tmp/stats_ae.bin";
+				int fd = open(filename.c_str(), O_CREAT | O_WRONLY | O_APPEND,
+						S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+				::write(fd, &stats->ae_raw_buffer[0].buff.vals[0], IPU3_UAPI_AE_BINS * IPU3_UAPI_AE_COLORS);
+				::write(fd, &stats->ae_raw_buffer[1].buff.vals[0], IPU3_UAPI_AE_BINS * IPU3_UAPI_AE_COLORS);
+				close(fd);
+			//}
+		}
+		else
+			rst_ae_hist_ = 0;
+	//	LOG(IPAIPU3, Error) << frame << ": done bit unset => rst: " << (int)rst_ae_hist_;
 	}
 
-	float Gr=0, R=0, B=0, Gb=0;
-	for (uint32_t i=0 ; i < 1280*45 ; i+=8) {
-		Gr += stats->awb_raw_buffer.meta_data[i];
-		R += stats->awb_raw_buffer.meta_data[i+1];
-		B += stats->awb_raw_buffer.meta_data[i+2];
-		Gb += stats->awb_raw_buffer.meta_data[i+3];
+	if (frame % 60 < 30) {
+		LOG(IPAIPU3, Error) << "Default";
+		calculateWBGains(Rectangle(0, 0, 1280, 720), stats);
 	}
-	Gr /= (1280*45)/8;
-	R /= (1280*45)/8;
-	B /= (1280*45)/8;
-	Gb /= (1280*45)/8;
-	
-	float G = (Gr+Gb)/2;
+	else
+		calculateWBGains(Rectangle(260, 150, 776, 650), stats);
 
-//	LOG(IPAIPU3, Error) << "Mean values: "<< "Gr:" << Gr << " R:" << R << " B:" << B << " Gb:" << Gb;
-	gain_ = 16*(64/G);
-
-	wbGains_[0] = 8192*(R/Gr);
-	wbGains_[1] = 8192*(G/R);
-	wbGains_[2] = 8192*(G/B);
-	wbGains_[3] = 8192*(B/Gb);
 #if 0
 	float X=(-0.14282)*(R)+(1.54924)*(G)+(-0.95641)*(B);
 	float Y=(-0.32466)*(R)+(1.57837)*(G)+(-0.73191)*(B);
