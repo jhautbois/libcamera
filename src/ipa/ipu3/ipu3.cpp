@@ -96,11 +96,11 @@ void IPAIPU3::configure([[maybe_unused]] const CameraSensorInfo &info,
 
 	minExposure_ = std::max<uint32_t>(itExp->second.min().get<int32_t>(), 1);
 	maxExposure_ = itExp->second.max().get<int32_t>();
-	exposure_ = maxExposure_;
+	exposure_ = itExp->second.def().get<int32_t>();
 
 	minGain_ = std::max<uint32_t>(itGain->second.min().get<int32_t>(), 1);
 	maxGain_ = itGain->second.max().get<int32_t>();
-	gain_ = maxGain_;
+	gain_ = itExp->second.def().get<int32_t>();
 
 	setControls(0);
 
