@@ -7,6 +7,9 @@
 
 #include <libcamera/ipa/ipu3.h>
 
+#include <fcntl.h>
+#include <unistd.h>
+
 #include <sys/mman.h>
 
 #include <linux/intel-ipu3.h>
@@ -170,13 +173,42 @@ void IPAIPU3::processEvent(const IPAOperationData &event)
 	}
 }
 
+const struct ipu3_uapi_ae_grid_config imgu_css_ae_grid_defaults = {
+	.width = 20,
+	.height = 22,
+	.block_width_log2 = 6,
+	.block_height_log2 = 5,
+	.reserved0 = 0,
+	.ae_en = 1,
+	.rst_hist_array = 1,
+	.done_rst_hist_array = 0,
+	.x_start = 0,
+	.y_start = 0,
+	.x_end = 1279,
+	.y_end = 719,
+};
+/* settings for Auto Exposure color correction matrix */
+const struct ipu3_uapi_ae_ccm imgu_css_ae_ccm_defaults = {
+	256, 256, 256, 256,		/* gain_gr/r/b/gb */
+	.mat = { 128, 0, 0, 0, 0, 128, 0, 0, 0, 0, 128, 0, 0, 0, 0, 128 },
+};
+
 void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params,
 			 [[maybe_unused]] const ControlList &controls)
 {
 	/* Prepare parameters buffer. */
 	memset(params, 0, sizeof(*params));
 
-	/* \todo Fill in parameters buffer. */
+	/* Fill in parameters buffer. */
+	static const struct ipu3_uapi_ae_weight_elem
+			weight_def = { 1, 1, 1, 1, 1, 1, 1, 1 };
+
+	params->use.acc_ae = 1;
+	params->acc_param.ae.grid_cfg = imgu_css_ae_grid_defaults;
+
+	params->acc_param.ae.ae_ccm = imgu_css_ae_ccm_defaults;
+	for (int i = 0; i < IPU3_UAPI_AE_WEIGHTS; i++)
+		params->acc_param.ae.weights[i] = weight_def;
 
 	IPAOperationData op;
 	op.operation = IPU3_IPA_ACTION_PARAM_FILLED;
@@ -195,6 +227,15 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 	/* \todo React to statistics and update internal state machine. */
 	/* \todo Add meta-data information to ctrls. */
 
+	if (stats->stats_4a_config.ae_grd_config.done_rst_hist_array) {
+		std::string filename = "/tmp/stats_ae.bin";
+		int fd = open(filename.c_str(), O_CREAT | O_WRONLY | O_APPEND,
+				S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+		::write(fd, &stats->ae_raw_buffer[0].buff.vals[0], IPU3_UAPI_AE_BINS * IPU3_UAPI_AE_COLORS);
+		::write(fd, &stats->ae_raw_buffer[1].buff.vals[0], IPU3_UAPI_AE_BINS * IPU3_UAPI_AE_COLORS);
+		close(fd);
+	}
+
 	IPAOperationData op;
 	op.operation = IPU3_IPA_ACTION_METADATA_READY;
 	op.controls.push_back(ctrls);
@@ -208,8 +249,8 @@ void IPAIPU3::setControls(unsigned int frame)
 	op.operation = IPU3_IPA_ACTION_SET_SENSOR_CONTROLS;
 
 	ControlList ctrls(ctrls_);
-	ctrls.set(V4L2_CID_EXPOSURE, static_cast<int32_t>(exposure_));
-	ctrls.set(V4L2_CID_ANALOGUE_GAIN, static_cast<int32_t>(gain_));
+	//ctrls.set(V4L2_CID_EXPOSURE, static_cast<int32_t>(exposure_));
+	//ctrls.set(V4L2_CID_ANALOGUE_GAIN, static_cast<int32_t>(gain_));
 	op.controls.push_back(ctrls);
 
 	queueFrameAction.emit(frame, op);
