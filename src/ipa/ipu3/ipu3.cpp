@@ -227,6 +227,9 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 	/* \todo React to statistics and update internal state machine. */
 	/* \todo Add meta-data information to ctrls. */
 
+	if (stats->stats_3a_status.ae_en)
+		LOG(IPAIPU3, Warning) << "AE bit is enabled";
+
 	if (stats->stats_4a_config.ae_grd_config.done_rst_hist_array) {
 		std::string filename = "/tmp/stats_ae.bin";
 		int fd = open(filename.c_str(), O_CREAT | O_WRONLY | O_APPEND,
