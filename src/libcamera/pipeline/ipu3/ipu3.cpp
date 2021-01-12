@@ -661,11 +661,8 @@ int PipelineHandlerIPU3::start(Camera *camera, [[maybe_unused]] ControlList *con
 		goto error;
 
 	ret = imgu->start();
-	if (ret) {
-		imgu->stop();
-		cio2->stop();
+	if (ret)
 		goto error;
-	}
 
 	/* Inform IPA of stream configuration and sensor controls. */
 	ret = data->cio2_.sensor()->sensorInfo(&sensorInfo);
@@ -700,7 +697,8 @@ int PipelineHandlerIPU3::start(Camera *camera, [[maybe_unused]] ControlList *con
 	return 0;
 
 error:
-	data->ipa_->stop();
+	imgu->stop();
+	cio2->stop();
 	freeBuffers(camera);
 	LOG(IPU3, Error) << "Failed to start camera " << camera->id();
 
