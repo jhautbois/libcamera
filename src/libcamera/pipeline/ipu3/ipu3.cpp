@@ -55,7 +55,7 @@ class IPU3CameraData : public CameraData
 {
 public:
 	IPU3CameraData(PipelineHandler *pipe)
-		: CameraData(pipe), delayedCtrls_(nullptr)
+		: CameraData(pipe)
 	{
 	}
 
@@ -73,7 +73,6 @@ public:
 	Stream vfStream_;
 	Stream rawStream_;
 
-	DelayedControls *delayedCtrls_;
 	std::unique_ptr<IPU3Frames> frameInfo_;
 
 	void *_patternBuffer;
@@ -854,10 +853,6 @@ int PipelineHandlerIPU3::registerCameras()
 		/* Initialze the camera controls. */
 		data->controlInfo_ = IPU3Controls;
 
-		data->delayedCtrls_ = cio2->sensor()->delayedContols();
-		data->cio2_.frameStart().connect(data->delayedCtrls_,
-						 &DelayedControls::frameStart);
-
 		/**
 		 * \todo Dynamically assign ImgU and output devices to each
 		 * stream and camera; as of now, limit support to two cameras
@@ -928,8 +923,7 @@ void IPU3CameraData::actOnIpa(unsigned int id,
 {
 	switch (action.operation) {
 	case IPU3_IPA_ACTION_SET_SENSOR_CONTROLS: {
-		const ControlList &controls = action.controls[0];
-		delayedCtrls_->push(controls);
+		//const ControlList &controls = action.controls[0];
 		break;
 	}
 	case IPU3_IPA_ACTION_PARAM_FILLED: {
