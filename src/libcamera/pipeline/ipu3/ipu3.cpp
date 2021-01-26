@@ -889,8 +889,9 @@ int PipelineHandlerIPU3::registerCameras()
 		 * the Raspberry Pi and listed as generic values.
 		 */
 		std::unordered_map<uint32_t, unsigned int> delays = {
-			{ V4L2_CID_ANALOGUE_GAIN, 1 },
-			{ V4L2_CID_EXPOSURE, 2 },
+			{ V4L2_CID_ANALOGUE_GAIN, 0 },
+			{ V4L2_CID_DIGITAL_GAIN, 0 },
+			{ V4L2_CID_EXPOSURE, 0 },
 		};
 
 		data->delayedCtrls_ =

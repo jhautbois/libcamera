@@ -21,6 +21,7 @@
 #include <libipa/ipa_interface_wrapper.h>
 
 #include "libcamera/internal/buffer.h"
+#include "libcamera/internal/camera_sensor.h"
 #include "libcamera/internal/log.h"
 
 namespace libcamera {
@@ -52,13 +53,15 @@ private:
 			const ControlList &controls);
 
 	float estimateCCT(float R, float G, float B);
-	void calculateWBGains(Rectangle roi,
-                        const ipu3_uapi_stats_3a *stats);
+	float calculateWBGains(Rectangle roi,
+                        const ipu3_uapi_stats_3a *stats, bool update);
 
 	void parseStatistics(unsigned int frame,
 			     const ipu3_uapi_stats_3a *stats);
 
-	void setControls(unsigned int frame);
+	void setDigitalGain(unsigned int frame);
+	void setGain(unsigned int frame);
+	void setExposure(unsigned int frame);
 
 	std::map<unsigned int, MappedFrameBuffer> buffers_;
 
@@ -68,15 +71,27 @@ private:
 	uint32_t exposure_;
 	uint32_t minExposure_;
 	uint32_t maxExposure_;
+	//uint32_t exposureStep_;
+	double exposureStepDuration_;
+
+	uint32_t minFPS_;
+
 	uint32_t gain_;
 	uint32_t minGain_;
 	uint32_t maxGain_;
+
+	uint32_t digitalGain_;
+
 	uint16_t wbGains_[4];
 	Rectangle metering_regions[15];
 	uint8_t metering_weights[15];
 
 	float brightness_;
 	float colorTemp_;
+
+	float fh,fl,fm,xh,xl,xm;
+	uint32_t last_frame;
+	bool gainsCalculated;
 };
 
 void IPAIPU3::configure([[maybe_unused]] const CameraSensorInfo &info,
@@ -85,6 +100,7 @@ void IPAIPU3::configure([[maybe_unused]] const CameraSensorInfo &info,
 			[[maybe_unused]] const IPAOperationData &ipaConfig,
 			[[maybe_unused]] IPAOperationData *result)
 {
+	double lineDuration;
 	result->operation = IPU3_IPA_STATUS_CONFIGURATION;
 
 	if (entityControls.empty())
@@ -104,15 +120,23 @@ void IPAIPU3::configure([[maybe_unused]] const CameraSensorInfo &info,
 		return;
 	}
 
-	minExposure_ = std::max<uint32_t>(itExp->second.min().get<int32_t>(), 1);
-	maxExposure_ = itExp->second.max().get<int32_t>();
+	lineDuration = info.lineLength
+				/ (info.pixelRate / 1e6f);
+	exposureStepDuration_ = lineDuration / 16;
+	minFPS_ = 25;
+
+	minExposure_ = itExp->second.min().get<int32_t>() * lineDuration;
+	maxExposure_ = itExp->second.min().get<int32_t>() * (((1e6f/minFPS_)/lineDuration));
+	LOG(IPAIPU3, Error) << "line duration: " << lineDuration << ", exposure between "<<minExposure_<<" and "<<maxExposure_;
 	exposure_ = minExposure_;
 
 	minGain_ = std::max<uint32_t>(itGain->second.min().get<int32_t>(), 1);
 	maxGain_ = itGain->second.max().get<int32_t>();
-	gain_ = minGain_;
+	gain_ = 16; // gain == 1.0
+	digitalGain_ = 1000;
 
-	memset(wbGains_, 0, sizeof(wbGains_));
+	memset(wbGains_, 8192, sizeof(wbGains_));
+	gainsCalculated = false;
 	brightness_ = 0;
 	colorTemp_ = 0;
 
@@ -138,6 +162,8 @@ void IPAIPU3::configure([[maybe_unused]] const CameraSensorInfo &info,
 
 	metering_regions[10] = Rectangle(260, 720-144, 1280-2*260, 144);
 
+#if 1
+	// Matrix mode
 	metering_weights[0]  = 3;
 	metering_weights[1]  = 3;
 	metering_weights[2]  = 3;
@@ -153,8 +179,27 @@ void IPAIPU3::configure([[maybe_unused]] const CameraSensorInfo &info,
 	metering_weights[12] = 0;
 	metering_weights[13] = 0;
 	metering_weights[14] = 0;
-
-	setControls(0);
+#else
+	// spot mode
+	metering_weights[0]  = 2;
+	metering_weights[1]  = 1;
+	metering_weights[2]  = 1;
+	metering_weights[3]  = 0;
+	metering_weights[4]  = 0;
+	metering_weights[5]  = 0;
+	metering_weights[6]  = 0;
+	metering_weights[7]  = 0;
+	metering_weights[8]  = 0;
+	metering_weights[9]  = 0;
+	metering_weights[10] = 0;
+	metering_weights[11] = 0;
+	metering_weights[12] = 0;
+	metering_weights[13] = 0;
+	metering_weights[14] = 0;
+#endif
+	setGain(0);
+	setDigitalGain(0);
+	setExposure(0);
 
 	result->data.push_back(1);
 }
@@ -275,9 +320,6 @@ void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params,
 	op.operation = IPU3_IPA_ACTION_PARAM_FILLED;
 
 	queueFrameAction.emit(frame, op);
-
-	/* \todo Calculate new values for exposure_ and gain_. */
-	setControls(frame);
 }
 
 float IPAIPU3::estimateCCT(float R, float G, float B)
@@ -294,7 +336,7 @@ float IPAIPU3::estimateCCT(float R, float G, float B)
 }
 
 
-void IPAIPU3::calculateWBGains(Rectangle roi, const ipu3_uapi_stats_3a *stats)
+float IPAIPU3::calculateWBGains(Rectangle roi, const ipu3_uapi_stats_3a *stats, bool update)
 {
 	float Gr=0, R=0, B=0, Gb=0;
 	Point topleft = roi.topLeft();
@@ -302,6 +344,7 @@ void IPAIPU3::calculateWBGains(Rectangle roi, const ipu3_uapi_stats_3a *stats)
 	uint32_t startX = (topleft.x / 8) * 8;
 	uint32_t endX = startX + (roi.size().width / 8);
 	uint32_t count = 0;
+	float brightness; 
 
 	for (uint32_t j = (topleft.y / 16) ; j < (topleft.y / 16)+(roi.size().height / 16) ; j++) {
 		for (uint32_t i=startX+startY ; i < endX+startY ; i+=8) {
@@ -320,12 +363,17 @@ void IPAIPU3::calculateWBGains(Rectangle roi, const ipu3_uapi_stats_3a *stats)
 	float G = (Gr+Gb)/2;
 
 	colorTemp_ = estimateCCT(R, G, B);
-	brightness_ = 0.299*R + 0.587*G + 0.114*B;
+	brightness = 0.299*R + 0.587*G + 0.114*B;
 
-	wbGains_[0] = 8192*(R/Gr);
-	wbGains_[1] = 8192*(G/R);
-	wbGains_[2] = 8192*(G/B);
-	wbGains_[3] = 8192*(B/Gb);
+	if (update) {
+		wbGains_[0] = 8192*(R/G);
+		wbGains_[1] = 8192*(G/R);
+		wbGains_[2] = 8192*(G/B);
+		wbGains_[3] = 8192*(B/G);
+		gainsCalculated = true;
+	}
+
+	return brightness;
 }
 
 void IPAIPU3::parseStatistics(unsigned int frame,
@@ -336,13 +384,69 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 	uint32_t sum_weights = 0;
 
 	for (uint32_t i = 0; i < 15 ; i++) {
-		calculateWBGains(metering_regions[i], stats);
-		brightness += brightness_ * metering_weights[i];
+		brightness += (calculateWBGains(metering_regions[i], stats, false) * metering_weights[i]);
 		sum_weights += metering_weights[i];
 	}
-	brightness_ = brightness / sum_weights;
-	LOG(IPAIPU3, Error) << "["<<frame<<","<<gain_<<"]"<<"Gain needed: " << 128/brightness_ << " Color temp estimation: " << colorTemp_;
-	calculateWBGains(Rectangle(0, 0, 1280, 720), stats);
+
+	if (frame == 8) {
+		fl = brightness_ / 8; // f(x1)
+		LOG(IPAIPU3, Error) << "["<<frame<<"]"<< gain_ << " " << exposure_<<" "<< fl;
+		exposure_ = maxExposure_;
+		setExposure(frame);
+		brightness_ = 0;
+	} else if (frame == 16) {
+		fh = brightness_ / 8;
+		digitalGain_ = std::max(1000u, std::min(4000u, static_cast<uint32_t>((128 / brightness_) * 1000)));
+		LOG(IPAIPU3, Error) << "["<<frame<<"]"<< digitalGain_;
+		setDigitalGain(frame);
+		xl = std::max(static_cast<uint32_t>(minExposure_*(digitalGain_ / 1000)), minExposure_);
+		xh = std::min(static_cast<uint32_t>(maxExposure_*(digitalGain_ / 1000)), maxExposure_);
+		xm=0.5*(xl+xh);
+		exposure_ = xm;
+		last_frame = frame;
+		brightness_ = 0;
+		setExposure(frame);
+	} else if (frame == 24) {
+		brightness_ /= 8;
+		gain_ = gain_ * (128/brightness_); // set gain to a "default" value
+		setGain(frame);
+		LOG(IPAIPU3, Error) << "["<<frame<<"]"<< gain_ << " " << exposure_<<" "<< brightness_ << " xl: " << xl << " xh: " << xh;
+		last_frame = frame;
+		brightness_ = 0;
+	} else if (frame >= 32) {
+		if ((frame - last_frame) == 8) {
+			brightness_ /= 8;
+			if ((gain_ == maxGain_) || (gain_ == minGain_) || (brightness_ < 50)) {
+				digitalGain_ = std::max(1000u, std::min(4000u, static_cast<uint32_t>((128 / brightness_) * 1000)));
+				setDigitalGain(frame);
+			}
+			if (exposure_ == maxExposure_) {
+				gain_ = std::min(gain_+16, maxGain_); // set gain to a "default" value
+				setGain(frame);
+			} else if ((gain_ == maxGain_) || (brightness_ > 190)) {
+				gain_ = std::max(gain_-16, minGain_); // set gain to a "default" value
+				setGain(frame);
+			}
+			fm = brightness_;
+			if ((std::abs(fm - 128) < 4) && !gainsCalculated)
+				calculateWBGains(Rectangle(520, 139, 3*80, 3*144), stats, true);
+			else if (gainsCalculated)
+				gainsCalculated = false;
+
+
+			LOG(IPAIPU3, Error) << "["<<frame<<"]"<< digitalGain_ << " " << gain_ << " " << exposure_<<" "<< brightness_;
+
+			if (fm < 127)
+				xm = std::min(xm*(128.0/fm), static_cast<double>(maxExposure_));
+			if (fm > 129)
+				xm = std::max(xm*(128.0/fm), static_cast<double>(minExposure_));
+			exposure_ = xm;
+			setExposure(frame);
+			last_frame = frame;
+			brightness_ = 0;
+		}
+	}
+	brightness_ += brightness / sum_weights;
 
 	IPAOperationData op;
 	op.operation = IPU3_IPA_ACTION_METADATA_READY;
@@ -351,14 +455,37 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 	queueFrameAction.emit(frame, op);
 }
 
-void IPAIPU3::setControls(unsigned int frame)
+void IPAIPU3::setDigitalGain(unsigned int frame)
+{
+	IPAOperationData op;
+	op.operation = IPU3_IPA_ACTION_SET_SENSOR_CONTROLS;
+
+	ControlList ctrls(ctrls_);
+	ctrls.set(V4L2_CID_DIGITAL_GAIN, static_cast<int32_t>(digitalGain_));
+	op.controls.push_back(ctrls);
+
+	queueFrameAction.emit(frame, op);
+}
+
+void IPAIPU3::setGain(unsigned int frame)
+{
+	IPAOperationData op;
+	op.operation = IPU3_IPA_ACTION_SET_SENSOR_CONTROLS;
+
+	ControlList ctrls(ctrls_);
+	ctrls.set(V4L2_CID_ANALOGUE_GAIN, static_cast<int32_t>(gain_));
+	op.controls.push_back(ctrls);
+
+	queueFrameAction.emit(frame, op);
+}
+
+void IPAIPU3::setExposure(unsigned int frame)
 {
 	IPAOperationData op;
 	op.operation = IPU3_IPA_ACTION_SET_SENSOR_CONTROLS;
 
 	ControlList ctrls(ctrls_);
 	ctrls.set(V4L2_CID_EXPOSURE, static_cast<int32_t>(exposure_));
-	ctrls.set(V4L2_CID_ANALOGUE_GAIN, static_cast<int32_t>(gain_));
 	op.controls.push_back(ctrls);
 
 	queueFrameAction.emit(frame, op);
