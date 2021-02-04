@@ -596,11 +596,15 @@ int DNGWriter::write(const char *filename, const Camera *camera,
 		float gain = metadata.get(controls::AnalogueGain);
 		uint16_t iso = std::min(std::max(gain * 100, 0.0f), 65535.0f);
 		TIFFSetField(tif, EXIFTAG_ISOSPEEDRATINGS, 1, &iso);
+	} else {
+		TIFFSetField(tif, EXIFTAG_ISOSPEEDRATINGS, 1, 600);
 	}
 
 	if (metadata.contains(controls::ExposureTime)) {
 		float exposureTime = metadata.get(controls::ExposureTime) / 1e6;
 		TIFFSetField(tif, EXIFTAG_EXPOSURETIME, exposureTime);
+	} else {
+		TIFFSetField(tif, EXIFTAG_EXPOSURETIME, 1/25);
 	}
 
 	TIFFWriteCustomDirectory(tif, &exifIFDOffset);

@@ -307,8 +307,10 @@ def dng_load_image(Cam, im_str):
         white = metadata['Exif.SubImage1.WhiteLevel'].value
         Img.sigbits = int(white).bit_length()
         Img.fmt = (Img.sigbits - 4) // 2
-        Img.exposure = int(metadata['Exif.Photo.ExposureTime'].value*1000000)
-        Img.againQ8 = metadata['Exif.Photo.ISOSpeedRatings'].value*256/100
+        #Img.exposure = int(metadata['Exif.Photo.ExposureTime'].value*1000000)
+        Img.exposure = 0.04
+        #Img.againQ8 = metadata['Exif.Photo.ISOSpeedRatings'].value*256/100
+        Img.againQ8 = 600*256/100
         Img.againQ8_norm = Img.againQ8 / 256
         Img.camName = metadata['Exif.Image.Model'].value
         Img.blacklevel = int(metadata['Exif.SubImage1.BlackLevel'].value[0])
