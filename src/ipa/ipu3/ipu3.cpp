@@ -111,6 +111,9 @@ void IPAIPU3::configure([[maybe_unused]] const CameraSensorInfo &info,
 	maxGain_ = itGain->second.max().get<int32_t>();
 	gain_ = minGain_;
 
+	gain_ = 96;
+	exposure_ = 25000;
+
 	memset(wbGains_, 0, sizeof(wbGains_));
 	brightness_ = 0;
 	colorTemp_ = 0;
@@ -219,12 +222,29 @@ void IPAIPU3::processEvent(const IPAOperationData &event)
 	}
 }
 
+const struct ipu3_uapi_ccm_mat_config imgu_css_ccm_defaults = {
+       15553, -6852, -509, 0,
+       -3210, 13918, -2516, 0,
+       -867, -6608, 15667, 0
+};
+const struct ipu3_uapi_ccm_mat_config imgu_css_ccm_4900k = {
+	7811, -464, -466, 0,
+	-635, 8762, -533, 0,
+	-469, -154, 6583, 0
+};
+
+const struct ipu3_uapi_ccm_mat_config imgu_css_ccm_3800k = {
+	7379, -526, -296, 0,
+	-411, 7397, -415, 0,
+	-224, -564, 7244, 0
+};
+
 const struct ipu3_uapi_bnr_static_config imgu_css_bnr_defaults = {
 	{ 16, 16, 16, 16 },			/* wb_gains */
 	{ 255, 255, 255, 255 },			/* wb_gains_thr */
 	{ 0, 0, 8, 6, 0, 14 },			/* thr_coeffs */
 	{ 0, 0, 0, 0 },				/* thr_ctrl_shd */
-	{ -128, 0, -128, 0 },			/* opt_center */
+	{ -648, 0, -366, 0 },			/* opt_center */
 	{					/* lut */
 		{ 17, 23, 28, 32, 36, 39, 42, 45,
 		  48, 51, 53, 55, 58, 60, 62, 64,
@@ -233,8 +253,8 @@ const struct ipu3_uapi_bnr_static_config imgu_css_bnr_defaults = {
 	},
 	{ 4, 0, 1, 8, 0, 8, 0, 8, 0 },		/* bp_ctrl */
 	{ 8, 4, 4, 0, 8, 0, 1, 1, 1, 1, 0 },	/* dn_detect_ctrl */
-	1920,
-	{2663424, 1498176},
+	1296,
+	{419904, 133956},
 };
 
 /* settings for Auto White Balance */
@@ -263,10 +283,30 @@ void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params,
 	// Activate wb gain
 	params->use.acc_bnr = 1;
 	params->acc_param.bnr = imgu_css_bnr_defaults;
-	params->acc_param.bnr.wb_gains.gr = wbGains_[0];
-	params->acc_param.bnr.wb_gains.r  = wbGains_[1];
-	params->acc_param.bnr.wb_gains.b  = wbGains_[2];
-	params->acc_param.bnr.wb_gains.gb = wbGains_[3];
+
+	params->use.acc_ccm = 1;
+	if (std::abs(colorTemp_ - 4800) < 500) {
+		params->acc_param.ccm = imgu_css_ccm_4900k;
+		params->acc_param.bnr.wb_gains.gr = wbGains_[0];
+		params->acc_param.bnr.wb_gains.r  = wbGains_[1];
+		params->acc_param.bnr.wb_gains.b  = wbGains_[2];
+		params->acc_param.bnr.wb_gains.gb = wbGains_[3];
+	}
+	else if (std::abs(colorTemp_ - 3800) < 500) {
+		params->acc_param.ccm = imgu_css_ccm_3800k;
+		params->acc_param.bnr.wb_gains.gr = 8192*0.6307;
+		params->acc_param.bnr.wb_gains.r  = 8192*1.283;
+		params->acc_param.bnr.wb_gains.b  = 8192*1.888;
+		params->acc_param.bnr.wb_gains.gb = 8192*0.6307;
+	}
+	else {
+		params->acc_param.ccm = imgu_css_ccm_defaults;
+		params->acc_param.ccm = imgu_css_ccm_3800k;
+		params->acc_param.bnr.wb_gains.gr = wbGains_[0];
+		params->acc_param.bnr.wb_gains.r  = wbGains_[1];
+		params->acc_param.bnr.wb_gains.b  = wbGains_[2];
+		params->acc_param.bnr.wb_gains.gb = wbGains_[3];
+	}
 
 	IPAOperationData op;
 	op.operation = IPU3_IPA_ACTION_PARAM_FILLED;
@@ -319,10 +359,11 @@ void IPAIPU3::calculateWBGains(Rectangle roi, const ipu3_uapi_stats_3a *stats)
 	colorTemp_ = estimateCCT(R, G, B);
 	brightness_ = 0.299*R + 0.587*G + 0.114*B;
 
-	wbGains_[0] = 8192*(R/Gr);
+	float tint = 1/((G/R)+(G/B)/2);
+	wbGains_[0] = 8192*tint;
 	wbGains_[1] = 8192*(G/R);
 	wbGains_[2] = 8192*(G/B);
-	wbGains_[3] = 8192*(B/Gb);
+	wbGains_[3] = 8192*tint;
 }
 
 void IPAIPU3::parseStatistics(unsigned int frame,
@@ -338,7 +379,7 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 		sum_weights += metering_weights[i];
 	}
 	brightness_ = brightness / sum_weights;
-	LOG(IPAIPU3, Error) << "["<<frame<<","<<gain_<<"]"<<"Gain needed: " << 128/brightness_ << " Color temp estimation: " << colorTemp_;
+	LOG(IPAIPU3, Error) << "["<<frame<<","<<gain_<<","<<exposure_<<"]"<<"Gain needed: " << 128/brightness_ << " Color temp estimation: " << colorTemp_;
 	calculateWBGains(Rectangle(0, 0, 1280, 720), stats);
 
 	IPAOperationData op;
@@ -352,12 +393,12 @@ void IPAIPU3::setControls(unsigned int frame)
 {
 	IPAOperationData op;
 	op.operation = IPU3_IPA_ACTION_SET_SENSOR_CONTROLS;
-
 	ControlList ctrls(ctrls_);
+if (frame == 0) {
 	ctrls.set(V4L2_CID_EXPOSURE, static_cast<int32_t>(exposure_));
 	ctrls.set(V4L2_CID_ANALOGUE_GAIN, static_cast<int32_t>(gain_));
+}
 	op.controls.push_back(ctrls);
-
 	queueFrameAction.emit(frame, op);
 }
 
