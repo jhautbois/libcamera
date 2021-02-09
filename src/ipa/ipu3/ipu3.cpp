@@ -10,6 +10,10 @@
 #include <stdint.h>
 #include <sys/mman.h>
 
+#include <vector>                                                               
+#include <iostream>  
+#include <numeric>                                                              
+
 #include <linux/intel-ipu3.h>
 #include <linux/v4l2-controls.h>
 
@@ -53,6 +57,7 @@ private:
 			const ControlList &controls);
 
 	float estimateCCT(float R, float G, float B);
+	void vectorizeWBGains(const ipu3_uapi_stats_3a *stats);
 	void calculateWBGains(Rectangle roi,
                         const ipu3_uapi_stats_3a *stats);
 
@@ -78,6 +83,8 @@ private:
 
 	float brightness_;
 	float colorTemp_;
+
+	std::vector<double> brightnessVec_;
 };
 
 void IPAIPU3::configure([[maybe_unused]] const CameraSensorInfo &info,
@@ -111,7 +118,7 @@ void IPAIPU3::configure([[maybe_unused]] const CameraSensorInfo &info,
 	maxGain_ = itGain->second.max().get<int32_t>();
 	gain_ = minGain_;
 
-	gain_ = 96;
+	gain_ = 16;
 	exposure_ = 25000;
 
 	memset(wbGains_, 0, sizeof(wbGains_));
@@ -221,12 +228,14 @@ void IPAIPU3::processEvent(const IPAOperationData &event)
 		break;
 	}
 }
-
+#if 0
 const struct ipu3_uapi_ccm_mat_config imgu_css_ccm_defaults = {
        15553, -6852, -509, 0,
        -3210, 13918, -2516, 0,
        -867, -6608, 15667, 0
 };
+#endif
+
 const struct ipu3_uapi_ccm_mat_config imgu_css_ccm_4900k = {
 	7811, -464, -466, 0,
 	-635, 8762, -533, 0,
@@ -285,20 +294,21 @@ void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params,
 	params->acc_param.bnr = imgu_css_bnr_defaults;
 
 	params->use.acc_ccm = 1;
-	if (std::abs(colorTemp_ - 4800) < 500) {
+	if (colorTemp_ > 4900) {
 		params->acc_param.ccm = imgu_css_ccm_4900k;
 		params->acc_param.bnr.wb_gains.gr = wbGains_[0];
 		params->acc_param.bnr.wb_gains.r  = wbGains_[1];
 		params->acc_param.bnr.wb_gains.b  = wbGains_[2];
 		params->acc_param.bnr.wb_gains.gb = wbGains_[3];
 	}
-	else if (std::abs(colorTemp_ - 3800) < 500) {
+	else {
 		params->acc_param.ccm = imgu_css_ccm_3800k;
 		params->acc_param.bnr.wb_gains.gr = 8192*0.6307;
 		params->acc_param.bnr.wb_gains.r  = 8192*1.283;
 		params->acc_param.bnr.wb_gains.b  = 8192*1.888;
 		params->acc_param.bnr.wb_gains.gb = 8192*0.6307;
 	}
+#if 0
 	else {
 		params->acc_param.ccm = imgu_css_ccm_defaults;
 		params->acc_param.ccm = imgu_css_ccm_3800k;
@@ -307,7 +317,7 @@ void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params,
 		params->acc_param.bnr.wb_gains.b  = wbGains_[2];
 		params->acc_param.bnr.wb_gains.gb = wbGains_[3];
 	}
-
+#endif
 	IPAOperationData op;
 	op.operation = IPU3_IPA_ACTION_PARAM_FILLED;
 
@@ -330,6 +340,22 @@ float IPAIPU3::estimateCCT(float R, float G, float B)
 	return 449*n*n*n+3525*n*n+6823.3*n+5520.33;
 }
 
+void IPAIPU3::vectorizeWBGains(const ipu3_uapi_stats_3a *stats)
+{
+	double Gr=0, R=0, B=0, Gb=0, G=0;
+	brightnessVec_.clear();
+
+	for (uint32_t j = 0 ; j < imgu_css_awb_defaults.grid.height ; j++) {
+		for (uint32_t i = 0 ; i < imgu_css_awb_defaults.grid.width*8 ; i+=8) {
+			Gr = stats->awb_raw_buffer.meta_data[i];
+			R = stats->awb_raw_buffer.meta_data[i+1];
+			B = stats->awb_raw_buffer.meta_data[i+2];
+			Gb = stats->awb_raw_buffer.meta_data[i+3];
+			G = (Gr+Gb)/2;
+			brightnessVec_.push_back(0.299*R + 0.587*G + 0.114*B);
+		}
+	}
+}
 
 void IPAIPU3::calculateWBGains(Rectangle roi, const ipu3_uapi_stats_3a *stats)
 {
@@ -337,7 +363,7 @@ void IPAIPU3::calculateWBGains(Rectangle roi, const ipu3_uapi_stats_3a *stats)
 	Point topleft = roi.topLeft();
 	uint32_t startY = (topleft.y / 16) * 160 * 8;
 	uint32_t startX = (topleft.x / 8) * 8;
-	uint32_t endX = startX + (roi.size().width / 8);
+	uint32_t endX = (startX + (roi.size().width / 8))*8;
 	uint32_t count = 0;
 
 	for (uint32_t j = (topleft.y / 16) ; j < (topleft.y / 16)+(roi.size().height / 16) ; j++) {
@@ -379,9 +405,16 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 		sum_weights += metering_weights[i];
 	}
 	brightness_ = brightness / sum_weights;
-	LOG(IPAIPU3, Error) << "["<<frame<<","<<gain_<<","<<exposure_<<"]"<<"Gain needed: " << 128/brightness_ << " Color temp estimation: " << colorTemp_;
+//	LOG(IPAIPU3, Error) << "["<<frame<<","<<gain_<<","<<exposure_<<"]"<<"Gain needed: " << 128/brightness_ << " Color temp estimation: " << colorTemp_;
 	calculateWBGains(Rectangle(0, 0, 1280, 720), stats);
 
+	vectorizeWBGains(stats);
+
+	std::nth_element(brightnessVec_.begin(), brightnessVec_.begin() + brightnessVec_.size()/2, brightnessVec_.end());
+	const auto [min, max] = std::minmax_element(begin(brightnessVec_), end(brightnessVec_));
+	std::cout << "[" << gain_ << ", " << exposure_ << "] mean: " << std::accumulate( brightnessVec_.begin(), brightnessVec_.end(), 0.0)/brightnessVec_.size()
+		<< " median: " << brightnessVec_[brightnessVec_.size()/2] << " min: " << *min << " max: " << *max << std::endl;
+ 
 	IPAOperationData op;
 	op.operation = IPU3_IPA_ACTION_METADATA_READY;
 	op.controls.push_back(ctrls);
@@ -394,10 +427,10 @@ void IPAIPU3::setControls(unsigned int frame)
 	IPAOperationData op;
 	op.operation = IPU3_IPA_ACTION_SET_SENSOR_CONTROLS;
 	ControlList ctrls(ctrls_);
-if (frame == 0) {
-	ctrls.set(V4L2_CID_EXPOSURE, static_cast<int32_t>(exposure_));
-	ctrls.set(V4L2_CID_ANALOGUE_GAIN, static_cast<int32_t>(gain_));
-}
+	if (frame == 0) {
+		ctrls.set(V4L2_CID_EXPOSURE, static_cast<int32_t>(exposure_));
+		ctrls.set(V4L2_CID_ANALOGUE_GAIN, static_cast<int32_t>(gain_));
+	}
 	op.controls.push_back(ctrls);
 	queueFrameAction.emit(frame, op);
 }
