@@ -7,8 +7,8 @@
 #ifndef __LIBCAMERA_IPA_ALGORITHM_H__
 #define __LIBCAMERA_IPA_ALGORITHM_H__
 
-// All algorithms should be derived from this class and made available to the
-// Controller.
+/* All algorithms should be derived from this class and made available to the
+ * Controller. */
 
 #include <string>
 #include <memory>
@@ -18,7 +18,7 @@
 
 namespace libcamera {
 
-// This defines the basic interface for all control algorithms.
+/* This defines the basic interface for all control algorithms. */
 
 class IPAAlgorithm
 {
@@ -40,15 +40,6 @@ private:
 	[[maybe_unused]] IPAController *controller_;
 	bool paused_;
 };
-
-// This code is for automatic registration of Front End algorithms with the
-// system.
-
-typedef IPAAlgorithm *(*AlgoCreateFunc)(IPAController *controller);
-struct RegisterAlgorithm {
-	RegisterAlgorithm(char const *name, AlgoCreateFunc create_func);
-};
-std::map<std::string, AlgoCreateFunc> const &GetAlgorithms();
 
 } /* namespace libcamera */
 

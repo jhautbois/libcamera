@@ -18,17 +18,3 @@ void IPAAlgorithm::Initialise()
 void IPAAlgorithm::Prepare() {}
 
 void IPAAlgorithm::Process() {}
-
-// For registering algorithms with the system:
-
-static std::map<std::string, AlgoCreateFunc> algorithms;
-std::map<std::string, AlgoCreateFunc> const &GetAlgorithms()
-{
-	return algorithms;
-}
-
-RegisterAlgorithm::RegisterAlgorithm(char const *name,
-				     AlgoCreateFunc create_func)
-{
-	algorithms[std::string(name)] = create_func;
-}

@@ -823,6 +823,7 @@ int PipelineHandlerIPU3::initControls(IPU3CameraData *data)
 	 */
 	double lineDuration = sensorInfo.lineLength
 			    / (sensorInfo.pixelRate / 1e6);
+	LOG(IPU3, Error) << "line duration: " << lineDuration;
 	const ControlInfoMap &sensorControls = sensor->controls();
 	const ControlInfo &v4l2Exposure = sensorControls.find(V4L2_CID_EXPOSURE)->second;
 	int32_t minExposure = v4l2Exposure.min().get<int32_t>() * lineDuration;

@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2019, Raspberry Pi (Trading) Limited
  *
- * awb_algorithm.hpp - AWB control algorithm interface
+ * awb_algorithm.h - AWB control algorithm interface
  */
 #ifndef __LIBCAMERA_AWB_ALGORITHM_H__
 #define __LIBCAMERA_AWB_ALGORITHM_H__
@@ -15,7 +15,7 @@ class AwbAlgorithm : public IPAAlgorithm
 {
 public:
 	AwbAlgorithm(IPAController *controller) : IPAAlgorithm(controller) {}
-	// An AWB algorithm must provide the following:
+	/* An AWB algorithm must provide the following: */
 	virtual unsigned int GetConvergenceFrames() const = 0;
 	virtual void SetMode(std::string const &mode_name) = 0;
 	virtual void SetManualGains(double manual_r, double manual_b) = 0;
