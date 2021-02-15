@@ -4,6 +4,8 @@ libipa_headers = files([
 ])
 
 libipa_sources = files([
+    'ipa_algorithm.cpp',
+    'ipa_controller.cpp',
 ])
 
 libipa_includes = include_directories('..')

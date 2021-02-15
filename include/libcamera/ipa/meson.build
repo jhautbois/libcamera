@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: CC0-1.0
 
 libcamera_ipa_headers = files([
+    'awb_algorithm.h',
+    'ipa_algorithm.h',
+    'ipa_controller.h',
     'ipa_controls.h',
     'ipa_interface.h',
     'ipa_module_info.h',
