@@ -13,6 +13,7 @@
 
 #include <libcamera/buffer.h>
 #include <libcamera/control_ids.h>
+#include <libcamera/ipa/ipa_controller.h>
 #include <libcamera/ipa/ipa_interface.h>
 #include <libcamera/ipa/ipa_module_info.h>
 #include <libcamera/ipa/ipu3_ipa_interface.h>
@@ -21,6 +22,9 @@
 #include "libcamera/internal/buffer.h"
 #include "libcamera/internal/log.h"
 
+#include "ipu3_agc.h"
+#include "ipu3_awb.h"
+
 namespace libcamera {
 
 LOG_DEFINE_CATEGORY(IPAIPU3)
@@ -28,6 +32,9 @@ LOG_DEFINE_CATEGORY(IPAIPU3)
 class IPAIPU3 : public ipa::ipu3::IPAIPU3Interface
 {
 public:
+	IPAIPU3()
+		: controller_() {}
+
 	int init([[maybe_unused]] const IPASettings &settings) override
 	{
 		return 0;
@@ -60,6 +67,11 @@ private:
 	uint32_t gain_;
 	uint32_t minGain_;
 	uint32_t maxGain_;
+
+	IPAController controller_;
+	IPU3Awb *awbAlgo_;
+	IPU3Agc *agcAlgo_;
+	ipu3_uapi_params params_;
 };
 
 void IPAIPU3::configure(const std::map<uint32_t, ControlInfoMap> &entityControls)
@@ -83,11 +95,18 @@ void IPAIPU3::configure(const std::map<uint32_t, ControlInfoMap> &entityControls
 
 	minExposure_ = std::max(itExp->second.min().get<int32_t>(), 1);
 	maxExposure_ = itExp->second.max().get<int32_t>();
-	exposure_ = maxExposure_;
+	exposure_ = 123;
 
 	minGain_ = std::max(itGain->second.min().get<int32_t>(), 1);
 	maxGain_ = itGain->second.max().get<int32_t>();
-	gain_ = maxGain_;
+	gain_ = 1;
+
+	awbAlgo_ = new IPU3Awb(&controller_);
+	awbAlgo_->Initialise(params_);
+	agcAlgo_ = new IPU3Agc(&controller_);
+
+	/*\todo not used yet... */
+	controller_.Initialise();
 
 	setControls(0);
 }
@@ -162,10 +181,10 @@ void IPAIPU3::processControls([[maybe_unused]] unsigned int frame,
 void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params)
 {
 	/* Prepare parameters buffer. */
-	memset(params, 0, sizeof(*params));
+	awbAlgo_->updateBNR(params_);
+	memcpy(params, &params_, sizeof(*params));
 
 	/* \todo Fill in parameters buffer. */
-
 	ipa::ipu3::IPU3Action op;
 	op.op = ipa::ipu3::ActionParamFilled;
 
@@ -179,6 +198,10 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 
 	/* \todo React to statistics and update internal state machine. */
 	/* \todo Add meta-data information to ctrls. */
+	agcAlgo_->Process(stats, exposure_, gain_);
+	if (agcAlgo_->Converged())
+		awbAlgo_->calculateWBGains(Rectangle(250, 160, 800, 400), stats);
+	setControls(frame);
 
 	ipa::ipu3::IPU3Action op;
 	op.op = ipa::ipu3::ActionMetadataReady;
