@@ -1,6 +1,6 @@
-/* SPDX-License-Identifier: BSD-2-Clause */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
- * Copyright (C) 2019, Raspberry Pi (Trading) Limited
+ * Copyright (C) 2021, Ideas On Board
  *
  * algorithm.cpp - ISP control algorithms
  */
