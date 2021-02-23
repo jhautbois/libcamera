@@ -76,6 +76,16 @@ void IPU3Awb::initialise()
 {
 }
 
+static void fillGamma(uint32_t x0, uint32_t y0,
+								uint32_t x1, uint32_t y1,
+								ipu3_uapi_params &params)
+{
+	uint32_t a = (y1 - y0) / (x1 - x0);
+	uint32_t b = y1 - a * x1;
+	for (uint32_t i = x0; i < x1; i++)
+		params.acc_param.gamma.gc_lut.lut[i] = a * i + b;
+}
+
 void IPU3Awb::initialise(ipu3_uapi_params &params)
 {
 	params.use.acc_awb = 1;
@@ -91,14 +101,13 @@ void IPU3Awb::initialise(ipu3_uapi_params &params)
 	params.use.acc_gamma = 1;
 	params.acc_param.gamma.gc_ctrl.enable = 1;
 
-	uint32_t a = (32 * 245) / (245 - 9);
-
-	for (uint32_t i = 0; i < 10; i++)
-		params.acc_param.gamma.gc_lut.lut[i] = 0;
-	for (uint32_t i = 10; i < 245; i++)
-		params.acc_param.gamma.gc_lut.lut[i] = a * i + (0 - a * 9);
-	for (uint32_t i = 245; i < 255; i++)
-		params.acc_param.gamma.gc_lut.lut[i] = 32 * 245;
+	fillGamma(0, 0, 12, 33, params);
+	fillGamma(12, 33, 30, 94, params);
+	fillGamma(30, 94, 55, 245, params);
+	fillGamma(55, 245, 90, 683, params);
+	fillGamma(90, 683, 139, 2012, params);
+	fillGamma(139, 2012, 208, 5371, params);
+	fillGamma(208, 5371, 255, 8191, params);
 
 	wbGains_[0] = 8192 * 0.8;
 	wbGains_[1] = 8192;
