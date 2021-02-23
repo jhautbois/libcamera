@@ -21,6 +21,7 @@
 #include "libcamera/internal/buffer.h"
 #include "libcamera/internal/log.h"
 
+#include "ipu3_agc.h"
 #include "ipu3_awb.h"
 
 namespace libcamera {
@@ -65,6 +66,8 @@ private:
 
 	/* Interface to the AWB algorithm */
 	ipa::IPU3Awb *awbAlgo_;
+	/* Interface to the AEC/AGC algorithm */
+	ipa::IPU3Agc *agcAlgo_;
 	/* Local parameter storage */
 	ipu3_uapi_params params_;
 };
@@ -100,6 +103,8 @@ void IPAIPU3::configure(const std::map<uint32_t, ControlInfoMap> &entityControls
 
 	awbAlgo_ = new ipa::IPU3Awb();
 	awbAlgo_->initialise(params_);
+
+	agcAlgo_ = new ipa::IPU3Agc();
 
 	setControls(0);
 }
@@ -187,7 +192,10 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 {
 	ControlList ctrls(controls::controls);
 
-	awbAlgo_->calculateWBGains(Rectangle(250, 160, 800, 400), stats);
+	agcAlgo_->process(stats, exposure_, gain_);
+	if (agcAlgo_->converged())
+		awbAlgo_->calculateWBGains(Rectangle(250, 160, 800, 400), stats);
+
 	setControls(frame);
 
 	ipa::ipu3::IPU3Action op;
