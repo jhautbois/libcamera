@@ -105,6 +105,7 @@ void IPU3Awb::initialise(ipu3_uapi_params &params)
 	wbGains_[2] = 8192;
 	wbGains_[3] = 8192 * 0.8;
 
+	cct_ = 0;
 	frame_count_ = 0;
 }
 
@@ -151,11 +152,7 @@ void IPU3Awb::calculateWBGains([[maybe_unused]] Rectangle roi,
 
 	double Rgain = Grmed / Rmed;
 	double Bgain = Gbmed / Bmed;
-	LOG(IPU3Awb, Debug) << "max R, Gr, B, Gb: "
-			    << redValues.back() << ","
-			    << greenRedValues.back() << ","
-			    << blueValues.back() << ","
-			    << greenBlueValues.back();
+	
 	tint_ = ((Rmed / Grmed) + (Bmed / Gbmed)) / 2;
 
 	/* \todo Those are corrections when light is really low
@@ -184,14 +181,23 @@ void IPU3Awb::calculateWBGains([[maybe_unused]] Rectangle roi,
 
 void IPU3Awb::updateWbParameters(ipu3_uapi_params &params)
 {
-	params.acc_param.bnr.wb_gains.gr = wbGains_[0];
-	params.acc_param.bnr.wb_gains.r = wbGains_[1];
-	params.acc_param.bnr.wb_gains.b = wbGains_[2];
-	params.acc_param.bnr.wb_gains.gb = wbGains_[3];
-	if (cct_ < 5500)
-		params.acc_param.ccm = imgu_css_ccm_3800k;
-	else
-		params.acc_param.ccm = imgu_css_ccm_6000k;
+	if ((wbGains_[0] == 0)
+		|| (wbGains_[1] == 0)
+		|| (wbGains_[2] == 0)
+		|| (wbGains_[3] == 0)) {
+		LOG(IPU3Awb, Error) << "Gains can't be 0";
+	}
+	else {
+		params.acc_param.bnr.wb_gains.gr = wbGains_[0];
+		params.acc_param.bnr.wb_gains.r = wbGains_[1];
+		params.acc_param.bnr.wb_gains.b = wbGains_[2];
+		params.acc_param.bnr.wb_gains.gb = wbGains_[3];
+
+		if (cct_ < 5500)
+			params.acc_param.ccm = imgu_css_ccm_3800k;
+		else
+			params.acc_param.ccm = imgu_css_ccm_6000k;
+	}
 }
 
 } /* namespace ipa */
