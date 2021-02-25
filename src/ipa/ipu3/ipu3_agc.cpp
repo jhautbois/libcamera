@@ -21,27 +21,27 @@ namespace ipa {
 LOG_DEFINE_CATEGORY(IPU3Agc)
 
 /* Number of frames to wait before calculating stats on minimum exposure */
-static const uint32_t kInitialFrameMinAECount = 4;
+static const uint32_t kInitialFrameMinAECount = 0;
 /* Number of frames to wait before calculating stats on maximum exposure */
-static const uint32_t kInitialFrameMaxAECount = 8;
+static const uint32_t kInitialFrameMaxAECount = 12;
 /* Number of frames to wait before calculating stats and estimate gain/exposure */
-static const uint32_t kInitialFrameSkipCount = 12;
+static const uint32_t kInitialFrameSkipCount = 18;
 /* Number of frames to wait between new gain/exposure estimations */
-static const uint32_t kFrameSkipCount = 4;
+static const uint32_t kFrameSkipCount = 8;
 
 /* Maximum ISO value for analogue gain */
 static const uint32_t kMaxISO = 1000;
 static const uint32_t kMinISO = 100;
 /* Maximum analogue gain value
  * \todo grab it from a camera helper */
-static const uint32_t kMinGain = 16 * (kMinISO / 100);
-static const uint32_t kMaxGain = 16 * (kMaxISO / 100);
+static const uint32_t kMinGain = kMinISO / 100;
+static const uint32_t kMaxGain = kMaxISO / 100;
 /* \todo use calculated value based on sensor */
 static const uint32_t kMinExposure = 1;
-static const uint32_t kMaxExposure = 230;
+static const uint32_t kMaxExposure = 1976;
 
 IPU3Agc::IPU3Agc()
-	: frameCount_(0), converged_(false)
+	: frameCount_(0), converged_(false), updateControls_(false)
 {
 }
 
@@ -94,13 +94,17 @@ void IPU3Agc::moments(std::unordered_map<uint32_t, uint32_t> &data, int n)
 	skew_ = skew;
 }
 #endif
-void IPU3Agc::processBrightness(const ipu3_uapi_stats_3a *stats)
+void IPU3Agc::processBrightness(Rectangle roi, const ipu3_uapi_stats_3a *stats)
 {
+	Point topleft = roi.topLeft();
+	uint32_t startY = (topleft.y / 16) * 160 * 8;
+	uint32_t startX = (topleft.x / 8) * 8;
+	uint32_t endX = (startX + (roi.size().width / 8)) * 8;
+
 	cellsBrightness_.clear();
-	
-	/*\todo Replace constant values with real BDS configuration */
-	for (uint32_t j = 0; j < 45; j++) {
-		for (uint32_t i = 0; i < 160 * 45 * 8; i += 8) {
+
+	for (uint32_t j = (topleft.y / 16); j < (topleft.y / 16) + (roi.size().height / 16); j++) {
+		for (uint32_t i = startX + startY; i < endX + startY; i += 8) {
 			uint8_t Gr = stats->awb_raw_buffer.meta_data[i];
 			uint8_t R = stats->awb_raw_buffer.meta_data[i + 1];
 			uint8_t B = stats->awb_raw_buffer.meta_data[i + 2];
@@ -127,29 +131,9 @@ void IPU3Agc::processBrightness(const ipu3_uapi_stats_3a *stats)
 }
 
 /* \todo make this function a math one ? */
-uint32_t IPU3Agc::rootApproximation()
+uint32_t IPU3Agc::rootApproximation(uint32_t currentValue, uint32_t prevValue, double currentMean, double prevMean)
 {
-	return (currentExposure_ * prevIqMean_ + prevExposure_ * currentIqMean_) / (prevIqMean_ + currentIqMean_);
-}
-
-static uint32_t getGain(uint32_t x0, double y0,
-						uint32_t x1, double y1, uint32_t y)
-{
-	double a = (y1 - y0) / (x1 - x0);
-	double b = y1 - a * x1;
-
-	LOG(IPU3Agc, Error) << "new gain: " << x0
-						<< "," << y0
-						<< "," << x1
-						<< "," << y1
-						<< "," << a
-						<< "," << b
-						<< "," << (y-b) / a;
-
-	if (a != 0)
-		return (y - b) / a;
-	else
-		return kMinGain;
+	return static_cast<uint32_t>((currentValue * prevMean + prevValue * currentMean) / (prevMean + currentMean));
 }
 
 void IPU3Agc::lockExposureGain(uint32_t &exposure, uint32_t &gain)
@@ -157,112 +141,80 @@ void IPU3Agc::lockExposureGain(uint32_t &exposure, uint32_t &gain)
 	/* Algorithm initialization wait for first valid frames */
 	/* \todo - have a number of frames given by DelayedControls ?
 	 * - implement a function for IIR */
-	LOG(IPU3Agc, Error) << "-> " << frameCount_
-			<< "," << exposure
-			<< "," << gain
-			<< "," << spread_
-			<< "," << prevIqMean_
-			<< "," << currentIqMean_;
 	if (frameCount_ == kInitialFrameMinAECount) {
-		exposure = kMaxExposure;
+		exposure = kMinExposure;
 		gain = kMinGain;
 		converged_ = false;
+		updateControls_ = true;
 	} else if (frameCount_ == kInitialFrameMaxAECount) {
-		prevIqMean_ = spread_;
-		lastFrame_ = frameCount_;
+		prevIqMean_ = iqMean_;
+		LOG(IPU3Agc, Error) << "-> " << frameCount_
+				    << "," << exposure
+				    << "," << gain
+				    << "," << spread_
+				    << "," << iqMean_
+				    << "," << prevIqMean_;
+		prevExposure_ = exposure;
+		prevGain_ = gain;
 		gain = kMaxGain;
-		prevExposure_ = exposure;
-	} else if ((frameCount_ >= kInitialFrameSkipCount) && (frameCount_ - lastFrame_ >= kFrameSkipCount)) {
-		currentIqMean_ = spread_;
-
-		if (frameCount_ == kInitialFrameSkipCount) {
-			gain = getGain(kMinGain, prevIqMean_, kMaxGain, currentIqMean_, 200);
-			exposure = kMinExposure;
-		}
-		LOG(IPU3Agc, Error) << frameCount_
-			<< "," << exposure
-			<< "," << gain
-			<< "," << spread_
-			<< "," << currentIqMean_ - prevIqMean_;
-
-#if 0
-		if (currentIqMean_ - prevIqMean_ > 1) {
-			prevExposure_ = nextExposure_;
-			exposure = rootApproximation();
-			LOG(IPU3Agc, Error) << frameCount_ << " under: " << prevExposure_
-								<< ">" << exposure
-								<< "," << gain
-								<< "," << spread_
-								<< "," << iqMean_
-								<< "," << currentIqMean_ - prevIqMean_;
-			nextExposure_ = exposure;
-		}
-		else if (currentIqMean_ - prevIqMean_ < -1) {
-			currentExposure_ = nextExposure_;
-			exposure = rootApproximation();
-			LOG(IPU3Agc, Error) << frameCount_ << " over: " << prevExposure_
-								<< ">" << exposure
-								<< "," << gain
-								<< "," << spread_
-								<< "," << iqMean_
-								<< "," << currentIqMean_ - prevIqMean_;
-			nextExposure_ = exposure;
-		} else {
+		exposure = kMaxExposure;
+		updateControls_ = true;
+	} else if (frameCount_ == kInitialFrameSkipCount) {
+		updateControls_ = true;
+		currentIqMean_ = iqMean_;
+		LOG(IPU3Agc, Error) << "-> " << frameCount_
+				    << "," << exposure
+				    << "," << gain
+				    << "," << spread_
+				    << "," << iqMean_
+				    << "," << prevIqMean_;
+		nextExposure_ = std::max(kMinExposure,
+					 std::min(kMaxExposure, rootApproximation(prevExposure_, currentExposure_, prevIqMean_, currentIqMean_)));
+		nextGain_ = std::max(kMaxGain,
+				     std::min(kMaxGain, rootApproximation(kMinGain, kMaxGain, prevIqMean_, currentIqMean_)));
+	} else if ((frameCount_ > kInitialFrameSkipCount) && (frameCount_ - lastFrame_ >= kFrameSkipCount)) {
+		LOG(IPU3Agc, Error) << "-> " << frameCount_
+				    << "," << exposure
+				    << "," << gain
+				    << "," << spread_
+				    << "," << iqMean_
+				    << "," << prevIqMean_;
+		if (std::abs(prevIqMean_ - iqMean_) < 1) {
+			updateControls_ = false;
 			LOG(IPU3Agc, Error) << frameCount_ << " good: " << exposure << "," << gain << "," << spread_ << "," << iqMean_ << "," << currentIqMean_ - prevIqMean_;
-			//converged_ = true;
-		}
-#endif
-		//prevIqMean_ = currentIqMean_;
-		lastFrame_ = frameCount_;
-	}
-}
-
-void IPU3Agc::lockExposure(uint32_t &exposure, uint32_t &gain)
-{
-	/* Algorithm initialization wait for first valid frames */
-	/* \todo - have a number of frames given by DelayedControls ?
-	 * - implement a function for IIR */
-	if (frameCount_ == kInitialFrameMinAECount) {
-		prevExposure_ = exposure;
-
-		prevSkew_ = skew_;
-		/* \todo use configured values */
-		exposure = 800;
-		gain = 8;
-		currentExposure_ = exposure;
-	} else if (frameCount_ == kInitialFrameMaxAECount) {
-		currentSkew_ = skew_;
-		exposure = rootApproximation();
-		nextExposure_ = exposure;
-		lastFrame_ = frameCount_;
-	} else if ((frameCount_ >= kInitialFrameSkipCount) && (frameCount_ - lastFrame_ >= kFrameSkipCount)) {
-		currentSkew_ = skew_;
-		/* \todo properly calculate a gain */
-		if (frameCount_ == kInitialFrameSkipCount)
-			gain = ((8 * prevSkew_) + (1 * currentSkew_)) / (prevSkew_ + currentSkew_);
-
-		if (currentSkew_ - prevSkew_ > 1) {
-			/* under exposed */
-			prevExposure_ = nextExposure_;
-			exposure = rootApproximation();
-			nextExposure_ = exposure;
-		} else if (currentSkew_ - prevSkew_ < -1) {
-			/* over exposed */
-			currentExposure_ = nextExposure_;
-			exposure = rootApproximation();
-			nextExposure_ = exposure;
-		} else {
-			/* we have converged */
 			converged_ = true;
+		} else if (iqMean_ < 150) {
+			updateControls_ = true;
+			prevExposure_ = nextExposure_;
+			prevGain_ = nextGain_;
+			nextExposure_ = std::max(kMinExposure,
+						 std::min(kMaxExposure, rootApproximation(prevExposure_, currentExposure_, prevIqMean_, currentIqMean_)));
+			nextGain_ = std::max(kMaxGain,
+					     std::min(kMaxGain, rootApproximation(kMinGain, kMaxGain, prevIqMean_, currentIqMean_)));
+			nextExposure_ = exposure;
+			nextGain_ = gain;
+		} else if (iqMean_ > 210) {
+			updateControls_ = true;
+			currentExposure_ = nextExposure_;
+			currentGain_ = nextGain_;
+			nextExposure_ = std::max(kMinExposure,
+						 std::min(kMaxExposure, rootApproximation(prevExposure_, currentExposure_, prevIqMean_, currentIqMean_)));
+			nextGain_ = std::max(kMaxGain,
+					     std::min(kMaxGain, rootApproximation(kMinGain, kMaxGain, prevIqMean_, currentIqMean_)));
+			nextExposure_ = exposure;
+			nextGain_ = gain;
 		}
+		prevIqMean_ = currentIqMean_;
+		currentIqMean_ = iqMean_;
 		lastFrame_ = frameCount_;
-		prevSkew_ = currentSkew_;
+	} else {
+		updateControls_ = false;
 	}
 }
 
 void IPU3Agc::process(const ipu3_uapi_stats_3a *stats, uint32_t &exposure, uint32_t &gain)
 {
-	processBrightness(stats);
+	processBrightness(Rectangle(250, 160, 800, 400), stats);
 	if (!converged_)
 		lockExposureGain(exposure, gain);
 	frameCount_++;

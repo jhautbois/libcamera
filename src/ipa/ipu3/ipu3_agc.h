@@ -31,11 +31,12 @@ public:
 
 	void process(const ipu3_uapi_stats_3a *stats, uint32_t &exposure, uint32_t &gain);
 	bool converged() { return converged_; }
+	bool updateControls() { return updateControls_; }
 
 private:
 	void moments(std::unordered_map<uint32_t, uint32_t> &data, int n);
-	void processBrightness(const ipu3_uapi_stats_3a *stats);
-	uint32_t rootApproximation();
+	void processBrightness(Rectangle roi, const ipu3_uapi_stats_3a *stats);
+	uint32_t rootApproximation(uint32_t currentValue, uint32_t prevValue, double currentMean, double prevMean);
 	void lockExposureGain(uint32_t &exposure, uint32_t &gain);
 	void lockExposure(uint32_t &exposure, uint32_t &gain);
 
@@ -49,11 +50,15 @@ private:
 	uint32_t prevExposure_;
 	uint32_t currentExposure_;
 	uint32_t nextExposure_;
+	uint32_t prevGain_;
+	uint32_t currentGain_;
+	uint32_t nextGain_;
 
 	double skew_;
 	double prevSkew_;
 	double currentSkew_;
 	bool converged_;
+	bool updateControls_;
 
 	double iqMean_;
 	double prevIqMean_;

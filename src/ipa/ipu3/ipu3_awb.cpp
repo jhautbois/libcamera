@@ -51,12 +51,6 @@ static const struct ipu3_uapi_awb_config_s imgu_css_awb_defaults = {
 	},
 };
 
-static const struct ipu3_uapi_ccm_mat_config imgu_css_ccm_6000k = {
-	7239, -750, -37, 0,
-	-215, 8196, -200, 0,
-	-70, -589, 6810, 0
-};
-
 static const struct ipu3_uapi_ccm_mat_config imgu_css_ccm_3800k = {
 	7379, -526, -296, 0,
 	-411, 7397, -415, 0,
@@ -130,8 +124,7 @@ uint32_t IPU3Awb::estimateCCT(uint8_t red, uint8_t green, uint8_t blue)
 	return static_cast<uint32_t>(449 * n * n * n + 3525 * n * n + 6823.3 * n + 5520.33);
 }
 
-void IPU3Awb::calculateWBGains([[maybe_unused]] Rectangle roi,
-			       const ipu3_uapi_stats_3a *stats)
+void IPU3Awb::calculateWBGains(Rectangle roi, const ipu3_uapi_stats_3a *stats)
 {
 	std::vector<uint32_t> redValues, greenRedValues, greenBlueValues, blueValues;
 	Point topleft = roi.topLeft();
@@ -193,14 +186,15 @@ void IPU3Awb::calculateWBGains([[maybe_unused]] Rectangle roi,
 
 void IPU3Awb::updateWbParameters(ipu3_uapi_params &params)
 {
-	params.acc_param.bnr.wb_gains.gr = wbGains_[0];
-	params.acc_param.bnr.wb_gains.r = wbGains_[1];
-	params.acc_param.bnr.wb_gains.b = wbGains_[2];
-	params.acc_param.bnr.wb_gains.gb = wbGains_[3];
-	if (cct_ < 5500)
+	if ((wbGains_[0] == 0) || (wbGains_[1] == 0) || (wbGains_[2] == 0) || (wbGains_[3] == 0)) {
+		LOG(IPU3Awb, Error) << "Gains can't be 0, check the stats";
+	} else {
+		params.acc_param.bnr.wb_gains.gr = wbGains_[0];
+		params.acc_param.bnr.wb_gains.r = wbGains_[1];
+		params.acc_param.bnr.wb_gains.b = wbGains_[2];
+		params.acc_param.bnr.wb_gains.gb = wbGains_[3];
 		params.acc_param.ccm = imgu_css_ccm_3800k;
-	else
-		params.acc_param.ccm = imgu_css_ccm_6000k;
+	}
 }
 
 } /* namespace ipa */
