@@ -181,11 +181,8 @@ void IPU3Awb::calculateWBGains([[maybe_unused]] Rectangle roi,
 
 void IPU3Awb::updateWbParameters(ipu3_uapi_params &params)
 {
-	if ((wbGains_[0] == 0)
-		|| (wbGains_[1] == 0)
-		|| (wbGains_[2] == 0)
-		|| (wbGains_[3] == 0)) {
-		LOG(IPU3Awb, Error) << "Gains can't be 0";
+	if ((wbGains_[0] == 0) || (wbGains_[1] == 0) || (wbGains_[2] == 0) || (wbGains_[3] == 0)) {
+		LOG(IPU3Awb, Error) << "Gains can't be 0, check the stats";
 	}
 	else {
 		params.acc_param.bnr.wb_gains.gr = wbGains_[0];

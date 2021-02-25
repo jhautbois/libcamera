@@ -57,7 +57,7 @@ void IPU3Agc::moments(std::unordered_map<uint32_t, uint32_t> &data, int n)
 
 	s = 0.0;
 	for (j = 1; j <= n; j++)
-		s += data[j];
+		s += data[j]*j;
 
 	ave = s / n;
 	adev = var = skew = curt = 0.0;
@@ -84,16 +84,14 @@ void IPU3Agc::moments(std::unordered_map<uint32_t, uint32_t> &data, int n)
 void IPU3Agc::processBrightness(const ipu3_uapi_stats_3a *stats)
 {
 	cellsBrightness_.clear();
-
+	
 	/*\todo Replace constant values with real BDS configuration */
-	for (uint32_t j = 0; j < 45; j++) {
-		for (uint32_t i = 0; i < 160 * 45 * 8; i += 8) {
+	for (uint32_t i = 0; i < 160 * 45 * 8; i += 8) {
 			uint8_t Gr = stats->awb_raw_buffer.meta_data[i];
 			uint8_t R = stats->awb_raw_buffer.meta_data[i + 1];
 			uint8_t B = stats->awb_raw_buffer.meta_data[i + 2];
 			uint8_t Gb = stats->awb_raw_buffer.meta_data[i + 3];
 			cellsBrightness_.push_back(static_cast<uint32_t>(0.299 * R + 0.587 * (Gr + Gb) / 2 + 0.114 * B));
-		}
 	}
 	std::sort(cellsBrightness_.begin(), cellsBrightness_.end());
 
@@ -120,8 +118,8 @@ void IPU3Agc::lockExposure(uint32_t &exposure, uint32_t &gain)
 
 		prevSkew_ = skew_;
 		/* \todo use configured values */
-		exposure = 800;
-		gain = 8;
+		exposure = 230;
+		gain = 160;
 		currentExposure_ = exposure;
 	} else if (frameCount_ == kInitialFrameMaxAECount) {
 		currentSkew_ = skew_;
