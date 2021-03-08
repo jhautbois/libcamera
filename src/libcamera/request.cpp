@@ -18,6 +18,8 @@
 #include "libcamera/internal/log.h"
 #include "libcamera/internal/tracepoints.h"
 
+#define REQUEST_CANARY 0x1F2E3D4C
+
 /**
  * \file request.h
  * \brief Describes a frame capture request to be processed by a camera
@@ -89,6 +91,8 @@ Request::Request(Camera *camera, uint64_t cookie)
 
 	LIBCAMERA_TRACEPOINT(request_construct, this);
 
+	canary_ = REQUEST_CANARY;
+
 	LOG(Request, Debug) << "Created request - cookie: " << cookie_;
 }
 
@@ -99,6 +103,8 @@ Request::~Request()
 	delete metadata_;
 	delete controls_;
 	delete validator_;
+
+	canary_ = 0;
 }
 
 /**
@@ -113,6 +119,8 @@ Request::~Request()
  */
 void Request::reuse(ReuseFlag flags)
 {
+	ASSERT(canary_ == REQUEST_CANARY);
+
 	LIBCAMERA_TRACEPOINT(request_reuse, this);
 
 	pending_.clear();
@@ -177,6 +185,8 @@ void Request::reuse(ReuseFlag flags)
  */
 int Request::addBuffer(const Stream *stream, FrameBuffer *buffer)
 {
+	ASSERT(canary_ == REQUEST_CANARY);
+
 	if (!stream) {
 		LOG(Request, Error) << "Invalid stream reference";
 		return -EINVAL;
@@ -212,6 +222,8 @@ int Request::addBuffer(const Stream *stream, FrameBuffer *buffer)
  */
 FrameBuffer *Request::findBuffer(const Stream *stream) const
 {
+	ASSERT(canary_ == REQUEST_CANARY);
+
 	const auto it = bufferMap_.find(stream);
 	if (it == bufferMap_.end())
 		return nullptr;
@@ -263,6 +275,7 @@ FrameBuffer *Request::findBuffer(const Stream *stream) const
  */
 void Request::complete()
 {
+	ASSERT(canary_ == REQUEST_CANARY);
 	ASSERT(status_ == RequestPending);
 	ASSERT(!hasPendingBuffers());
 
@@ -290,6 +303,8 @@ void Request::complete()
  */
 bool Request::completeBuffer(FrameBuffer *buffer)
 {
+	ASSERT(canary_ == REQUEST_CANARY);
+
 	LIBCAMERA_TRACEPOINT(request_complete_buffer, this, buffer);
 
 	int ret = pending_.erase(buffer);
