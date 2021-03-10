@@ -131,4 +131,27 @@ IPU3Frames::Info *IPU3Frames::find(FrameBuffer *buffer)
 	return nullptr;
 }
 
+const std::string IPU3Frames::Info::toString() const
+{
+	std::stringstream ss;
+
+	ss << request->toString()
+	   << (metadataProcessed ? "" : "[!metadata]")
+	   << (paramDequeued ? "" : "[!param]");
+
+	return ss.str();
+}
+
+void IPU3Frames::dump() const
+{
+	LOG(IPU3, Error) << "Frames:";
+
+	for (auto const &itInfo : frameInfo_) {
+		Info *info = itInfo.second.get();
+
+		LOG(IPU3, Error)
+			<< " - " << info->toString();
+	}
+}
+
 } /* namespace libcamera */
