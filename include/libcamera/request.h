@@ -56,6 +56,8 @@ public:
 
 	bool hasPendingBuffers() const { return !pending_.empty(); }
 
+	const std::string toString() const;
+
 private:
 	LIBCAMERA_DISABLE_COPY(Request)
 

@@ -269,7 +269,7 @@ void Request::complete()
 	status_ = cancelled_ ? RequestCancelled : RequestComplete;
 
 	LOG(Request, Debug)
-		<< "Request has completed - cookie: " << cookie_
+		<< toString() << " has completed - cookie: " << cookie_
 		<< (cancelled_ ? " [Cancelled]" : "");
 
 	LIBCAMERA_TRACEPOINT(request_complete, this);
@@ -301,6 +301,19 @@ bool Request::completeBuffer(FrameBuffer *buffer)
 		cancelled_ = true;
 
 	return !hasPendingBuffers();
+}
+
+const std::string Request::toString() const
+{
+	std::stringstream ss;
+
+	/* Pending, Completed, Cancelled(X). */
+	static const char *statuses = "PCX";
+
+	ss << "Request (" << sequence_ << ":" << statuses[status_] << ":"
+	   << pending_.size() << ")";
+
+	return ss.str();
 }
 
 } /* namespace libcamera */
