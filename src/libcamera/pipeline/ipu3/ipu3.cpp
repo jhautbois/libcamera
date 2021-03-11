@@ -780,6 +780,8 @@ void PipelineHandlerIPU3::stop(Camera *camera)
 		LOG(IPU3, Fatal) << "There are still requests to complete.";
 
 	freeBuffers(camera);
+
+	data->requestSequence_ = 0;
 }
 
 int PipelineHandlerIPU3::queueRequestDevice(Camera *camera, Request *request)
