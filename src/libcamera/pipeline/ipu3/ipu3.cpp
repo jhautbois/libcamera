@@ -1168,8 +1168,10 @@ void IPU3CameraData::queueFrameAction(unsigned int id,
 	}
 	case ipa::ipu3::ActionParamFilled: {
 		IPU3Frames::Info *info = frameInfos_.find(id);
-		if (!info)
+		if (!info) {
+			LOG(IPU3, Fatal) << "No frameInfo for ActionParamFilled on ID: " << id;
 			break;
+		}
 
 		/* Queue all buffers from the request aimed for the ImgU. */
 		for (auto it : info->request->buffers()) {
@@ -1190,8 +1192,10 @@ void IPU3CameraData::queueFrameAction(unsigned int id,
 	}
 	case ipa::ipu3::ActionMetadataReady: {
 		IPU3Frames::Info *info = frameInfos_.find(id);
-		if (!info)
+		if (!info) {
+			LOG(IPU3, Fatal) << "No frameInfo for ActionMetadataReady on ID: " << id;
 			break;
+		}
 
 		/*
 		 * \todo Parse the value of the controls returned by the IPA
