@@ -19,8 +19,8 @@ class Request;
 
 struct FrameMetadata {
 	enum Status {
-		FrameSuccess,
 		FrameError,
+		FrameSuccess,
 		FrameCancelled,
 	};
 
@@ -28,7 +28,7 @@ struct FrameMetadata {
 		unsigned int bytesused;
 	};
 
-	Status status;
+	Status status = FrameError;
 	unsigned int sequence;
 	uint64_t timestamp;
 	std::vector<Plane> planes;
