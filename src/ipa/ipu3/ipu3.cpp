@@ -21,6 +21,7 @@
 #include "libcamera/internal/buffer.h"
 #include "libcamera/internal/log.h"
 
+#include "ipu3_agc.h"
 #include "ipu3_awb.h"
 
 static const uint32_t kMaxCellWidthPerSet = 160;
@@ -54,6 +55,7 @@ private:
 			     const ipu3_uapi_stats_3a *stats);
 
 	void setControls(unsigned int frame);
+	void calculateBdsGrid(const Size &bdsOutputSize);
 
 	std::map<unsigned int, MappedFrameBuffer> buffers_;
 
@@ -69,6 +71,8 @@ private:
 
 	/* Interface to the AWB algorithm */
 	std::unique_ptr<ipa::IPU3Awb> awbAlgo_;
+	/* Interface to the AEC/AGC algorithm */
+	std::unique_ptr<ipa::IPU3Agc> agcAlgo_;
 	/* Local parameter storage */
 	struct ipu3_uapi_params params_;
 
@@ -157,10 +161,13 @@ void IPAIPU3::configure(const std::map<uint32_t, ControlInfoMap> &entityControls
 
 	params_ = {};
 
+	calculateBdsGrid(bdsOutputSize);
+
 	awbAlgo_ = std::make_unique<ipa::IPU3Awb>();
 	awbAlgo_->initialise(params_, bdsOutputSize, bdsGrid_);
 
-	setControls(0);
+	agcAlgo_ = std::make_unique<ipa::IPU3Agc>();
+	agcAlgo_->initialise(bdsGrid_);
 }
 
 void IPAIPU3::mapBuffers(const std::vector<IPABuffer> &buffers)
@@ -232,7 +239,8 @@ void IPAIPU3::processControls([[maybe_unused]] unsigned int frame,
 
 void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params)
 {
-	awbAlgo_->updateWbParameters(params_, 1.0);
+	if (agcAlgo_->updateControls())
+		awbAlgo_->updateWbParameters(params_, agcAlgo_->gamma());
 
 	*params = params_;
 
