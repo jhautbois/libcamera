@@ -21,6 +21,7 @@
 #include "libcamera/internal/buffer.h"
 #include "libcamera/internal/log.h"
 
+#include "ipu3_agc.h"
 #include "ipu3_awb.h"
 
 namespace libcamera {
@@ -66,6 +67,8 @@ private:
 
 	/* Interface to the AWB algorithm */
 	std::unique_ptr<ipa::IPU3Awb> awbAlgo_;
+	/* Interface to the AEC/AGC algorithm */
+	std::unique_ptr<ipa::IPU3Agc> agcAlgo_;
 	/* Local parameter storage */
 	ipu3_uapi_params params_;
 };
@@ -103,7 +106,7 @@ void IPAIPU3::configure(const std::map<uint32_t, ControlInfoMap> &entityControls
 	awbAlgo_ = std::make_unique<ipa::IPU3Awb>();
 	awbAlgo_->initialise(params_, bdsOutputSize);
 
-	setControls(0);
+	agcAlgo_ = std::make_unique<ipa::IPU3Agc>();
 }
 
 void IPAIPU3::mapBuffers(const std::vector<IPABuffer> &buffers)
@@ -175,7 +178,7 @@ void IPAIPU3::processControls([[maybe_unused]] unsigned int frame,
 
 void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params)
 {
-	awbAlgo_->updateWbParameters(params_, 1.0);
+	awbAlgo_->updateWbParameters(params_, agcAlgo_->gamma());
 
 	*params = params_;
 
@@ -190,8 +193,17 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 {
 	ControlList ctrls(controls::controls);
 
-	awbAlgo_->calculateWBGains(Rectangle(250, 160, 800, 400), stats);
-	setControls(frame);
+	if (!stats->stats_3a_status.awb_en) {
+		LOG(IPAIPU3, Error) << "AWB stats are not enabled";
+	} else {
+		agcAlgo_->process(stats, exposure_, gain_);
+		/* \todo calculate gains once converged, but not after to avoid flickering */
+		if (agcAlgo_->converged())
+			/* \todo calculate it based on BDS */
+			awbAlgo_->calculateWBGains(Rectangle(64, 64, 129 * 8 - 64, 36 * 16 - 64), stats);
+		if (agcAlgo_->updateControls())
+			setControls(frame);
+	}
 
 	ipa::ipu3::IPU3Action op;
 	op.op = ipa::ipu3::ActionMetadataReady;
