@@ -21,6 +21,8 @@
 #include "libcamera/internal/buffer.h"
 #include "libcamera/internal/log.h"
 
+#include "ipu3_awb.h"
+
 namespace libcamera {
 
 LOG_DEFINE_CATEGORY(IPAIPU3)
@@ -62,6 +64,8 @@ private:
 	uint32_t minGain_;
 	uint32_t maxGain_;
 
+	/* Interface to the AWB algorithm */
+	std::unique_ptr<ipa::IPU3Awb> awbAlgo_;
 	/* Local parameter storage */
 	ipu3_uapi_params params_;
 };
@@ -95,6 +99,9 @@ void IPAIPU3::configure(const std::map<uint32_t, ControlInfoMap> &entityControls
 	gain_ = minGain_;
 
 	params_ = {};
+
+	awbAlgo_ = std::make_unique<ipa::IPU3Awb>();
+	awbAlgo_->initialise(params_, bdsOutputSize);
 
 	setControls(0);
 }
@@ -168,10 +175,9 @@ void IPAIPU3::processControls([[maybe_unused]] unsigned int frame,
 
 void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params)
 {
-	/* Prepare parameters buffer. */
-	memset(params, 0, sizeof(*params));
+	awbAlgo_->updateWbParameters(params_, 1.0);
 
-	/* \todo Fill in parameters buffer. */
+	*params = params_;
 
 	ipa::ipu3::IPU3Action op;
 	op.op = ipa::ipu3::ActionParamFilled;
@@ -184,8 +190,8 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 {
 	ControlList ctrls(controls::controls);
 
-	/* \todo React to statistics and update internal state machine. */
-	/* \todo Add meta-data information to ctrls. */
+	awbAlgo_->calculateWBGains(Rectangle(250, 160, 800, 400), stats);
+	setControls(frame);
 
 	ipa::ipu3::IPU3Action op;
 	op.op = ipa::ipu3::ActionMetadataReady;
