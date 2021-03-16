@@ -21,6 +21,11 @@
 #include "libcamera/internal/buffer.h"
 #include "libcamera/internal/log.h"
 
+#include "ipu3_awb.h"
+
+static const uint32_t kMaxCellWidthPerSet = 160;
+static const uint32_t kMaxCellHeightPerSet = 80;
+
 namespace libcamera {
 
 LOG_DEFINE_CATEGORY(IPAIPU3)
@@ -62,8 +67,12 @@ private:
 	uint32_t minGain_;
 	uint32_t maxGain_;
 
+	/* Interface to the AWB algorithm */
+	std::unique_ptr<ipa::IPU3Awb> awbAlgo_;
 	/* Local parameter storage */
-	ipu3_uapi_params params_;
+	struct ipu3_uapi_params params_;
+
+	struct ipu3_uapi_grid_config bdsGrid_;
 };
 
 int IPAIPU3::start()
@@ -71,6 +80,51 @@ int IPAIPU3::start()
 	setControls(0);
 
 	return 0;
+}
+
+/* This method calculates a grid for the AWB algorithm in the IPU3 firmware.
+ * Its input it the BDS output size calculated in the imgU.
+ * It is limited for now to the simplest method: find the lesser error
+ * with the width/height and respective log2 width/height of the cells.
+ * \todo smaller cells are better so adapt x_start to lose a bit but have
+ * a better average resolution. If a cell is saturated, it might make a big difference. */
+void IPAIPU3::calculateBdsGrid(const Size &bdsOutputSize)
+{
+	std::vector<uint32_t> log2WidthVector = { 3, 4, 5, 6, 7 };
+	std::vector<uint32_t> log2HeightVector = { 3, 4, 5, 6, 7 };
+	uint32_t minError = std::numeric_limits<uint32_t>::max();
+	uint32_t bestWidth = 0;
+	uint32_t bestHeight = 0;
+	uint32_t bestLog2Width = 0;
+	uint32_t bestLog2Height = 0;
+	bdsGrid_ = {};
+
+	for (uint32_t i = 0; i < log2WidthVector.size(); ++i) {
+		uint32_t width = std::min(kMaxCellWidthPerSet, bdsOutputSize.width >> log2WidthVector[i]);
+		width = width << log2WidthVector[i];
+		for (uint32_t j = 0; j < log2HeightVector.size(); ++j) {
+			int32_t height = std::min(kMaxCellHeightPerSet, bdsOutputSize.height >> log2HeightVector[j]);
+			height = height << log2HeightVector[j];
+			uint32_t error = std::abs((int)(width - bdsOutputSize.width)) + std::abs((int)(height - bdsOutputSize.height));
+
+			if (error > minError)
+				continue;
+
+			minError = error;
+			bestWidth = width;
+			bestHeight = height;
+			bestLog2Width = log2WidthVector[i];
+			bestLog2Height = log2HeightVector[j];
+		}
+	}
+
+	bdsGrid_.width = bestWidth >> bestLog2Width;
+	bdsGrid_.block_width_log2 = bestLog2Width;
+	bdsGrid_.height = bestHeight >> bestLog2Height;
+	bdsGrid_.block_height_log2 = bestLog2Height;
+	LOG(IPAIPU3, Debug) << "Best grid found is: ("
+			    << (int)bdsGrid_.width << " << " << (int)bdsGrid_.block_width_log2 << ") x ("
+			    << (int)bdsGrid_.height << "<<" << (int)bdsGrid_.block_height_log2 << ")";
 }
 
 void IPAIPU3::configure(const std::map<uint32_t, ControlInfoMap> &entityControls,
@@ -102,6 +156,9 @@ void IPAIPU3::configure(const std::map<uint32_t, ControlInfoMap> &entityControls
 	gain_ = minGain_;
 
 	params_ = {};
+
+	awbAlgo_ = std::make_unique<ipa::IPU3Awb>();
+	awbAlgo_->initialise(params_, bdsOutputSize, bdsGrid_);
 
 	setControls(0);
 }
@@ -175,10 +232,9 @@ void IPAIPU3::processControls([[maybe_unused]] unsigned int frame,
 
 void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params)
 {
-	/* Prepare parameters buffer. */
-	memset(params, 0, sizeof(*params));
+	awbAlgo_->updateWbParameters(params_, 1.0);
 
-	/* \todo Fill in parameters buffer. */
+	*params = params_;
 
 	ipa::ipu3::IPU3Action op;
 	op.op = ipa::ipu3::ActionParamFilled;
@@ -191,8 +247,14 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 {
 	ControlList ctrls(controls::controls);
 
-	/* \todo React to statistics and update internal state machine. */
-	/* \todo Add meta-data information to ctrls. */
+	if (!stats->stats_3a_status.awb_en) {
+		LOG(IPAIPU3, Error) << "AWB stats are not enabled";
+	} else {
+		agcAlgo_->process(stats, exposure_, gain_);
+		awbAlgo_->calculateWBGains(stats);
+		if (agcAlgo_->updateControls())
+			setControls(frame);
+	}
 
 	ipa::ipu3::IPU3Action op;
 	op.op = ipa::ipu3::ActionMetadataReady;
