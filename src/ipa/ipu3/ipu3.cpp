@@ -61,6 +61,9 @@ private:
 	uint32_t gain_;
 	uint32_t minGain_;
 	uint32_t maxGain_;
+
+	/* Local parameter storage */
+	ipu3_uapi_params params_;
 };
 
 void IPAIPU3::configure(const std::map<uint32_t, ControlInfoMap> &entityControls,
@@ -85,11 +88,13 @@ void IPAIPU3::configure(const std::map<uint32_t, ControlInfoMap> &entityControls
 
 	minExposure_ = std::max(itExp->second.min().get<int32_t>(), 1);
 	maxExposure_ = itExp->second.max().get<int32_t>();
-	exposure_ = maxExposure_;
+	exposure_ = minExposure_;
 
 	minGain_ = std::max(itGain->second.min().get<int32_t>(), 1);
 	maxGain_ = itGain->second.max().get<int32_t>();
-	gain_ = maxGain_;
+	gain_ = minGain_;
+
+	params_ = {};
 
 	setControls(0);
 }
