@@ -129,10 +129,10 @@ void calculateBDSHeight(ImgUDevice::Pipe *pipe, const Size &iif, const Size &gdc
 	float bdsHeight;
 
 	if (!isSameRatio(pipe->input, gdc)) {
+		unsigned int foundIfHeights[2] = { 0, 0 };
 		float estIFHeight = (iif.width * gdc.height) /
 				    static_cast<float>(gdc.width);
 		estIFHeight = std::clamp<float>(estIFHeight, minIFHeight, iif.height);
-		bool found = false;
 
 		ifHeight = utils::alignUp(estIFHeight, IF_ALIGN_H);
 		while (ifHeight >= minIFHeight && ifHeight / bdsSF >= minBDSHeight) {
@@ -142,7 +142,7 @@ void calculateBDSHeight(ImgUDevice::Pipe *pipe, const Size &iif, const Size &gdc
 				unsigned int bdsIntHeight = static_cast<unsigned int>(bdsHeight);
 
 				if (!(bdsIntHeight % BDS_ALIGN_H)) {
-					found = true;
+					foundIfHeights[0] = ifHeight;
 					break;
 				}
 			}
@@ -158,7 +158,7 @@ void calculateBDSHeight(ImgUDevice::Pipe *pipe, const Size &iif, const Size &gdc
 				unsigned int bdsIntHeight = static_cast<unsigned int>(bdsHeight);
 
 				if (!(bdsIntHeight % BDS_ALIGN_H)) {
-					found = true;
+					foundIfHeights[1] = ifHeight;
 					break;
 				}
 			}
@@ -166,7 +166,12 @@ void calculateBDSHeight(ImgUDevice::Pipe *pipe, const Size &iif, const Size &gdc
 			ifHeight += IF_ALIGN_H;
 		}
 
-		if (found) {
+		if (foundIfHeights[0])
+			ifHeight = foundIfHeights[0];
+		if (foundIfHeights[1])
+			ifHeight = foundIfHeights[1];
+
+		if (foundIfHeights[0] || foundIfHeights[1]) {
 			unsigned int bdsIntHeight = static_cast<unsigned int>(bdsHeight);
 
 			pipeConfigs.push_back({ bdsSF, { iif.width, ifHeight },
