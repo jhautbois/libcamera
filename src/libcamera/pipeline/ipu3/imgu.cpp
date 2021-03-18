@@ -23,6 +23,7 @@
 namespace libcamera {
 
 LOG_DECLARE_CATEGORY(IPU3)
+LOG_DEFINE_CATEGORY(IMGUPIPE)
 
 namespace {
 
@@ -128,6 +129,8 @@ void calculateBDSHeight(ImgUDevice::Pipe *pipe, const Size &iif, const Size &gdc
 	unsigned int ifHeight;
 	float bdsHeight;
 
+	LOG(IMGUPIPE, Debug) << "BDS sf: " << bdsSF << " BDS width: " << bdsWidth;
+
 	if (!isSameRatio(pipe->input, gdc)) {
 		unsigned int foundIfHeights[2] = { 0, 0 };
 		float estIFHeight = (iif.width * gdc.height) /
@@ -135,6 +138,9 @@ void calculateBDSHeight(ImgUDevice::Pipe *pipe, const Size &iif, const Size &gdc
 		estIFHeight = std::clamp<float>(estIFHeight, minIFHeight, iif.height);
 
 		ifHeight = utils::alignUp(estIFHeight, IF_ALIGN_H);
+		LOG(IMGUPIPE, Debug) << "Estimate IF Height: " << estIFHeight
+				     << " IF Height: " << ifHeight;
+
 		while (ifHeight >= minIFHeight && ifHeight <= iif.height &&
 		       ifHeight / bdsSF >= minBDSHeight) {
 
@@ -176,6 +182,11 @@ void calculateBDSHeight(ImgUDevice::Pipe *pipe, const Size &iif, const Size &gdc
 		if (foundIfHeights[0] || foundIfHeights[1]) {
 			unsigned int bdsIntHeight = static_cast<unsigned int>(bdsHeight);
 
+			LOG(IMGUPIPE, Debug)
+				<< "IF: " << Size(iif.width, ifHeight).toString()
+				<< "BDS: " << Size(bdsWidth, bdsIntHeight).toString()
+				<< "GDC: " << gdc.toString();
+
 			pipeConfigs.push_back({ bdsSF, { iif.width, ifHeight },
 						{ bdsWidth, bdsIntHeight }, gdc });
 			return;
@@ -190,6 +201,12 @@ void calculateBDSHeight(ImgUDevice::Pipe *pipe, const Size &iif, const Size &gdc
 
 				if (!(ifHeight % IF_ALIGN_H) &&
 				    !(bdsIntHeight % BDS_ALIGN_H)) {
+
+					LOG(IMGUPIPE, Debug)
+						<< "IF: " << Size(iif.width, ifHeight).toString()
+						<< "BDS: " << Size(bdsWidth, bdsIntHeight).toString()
+						<< "GDC: " << gdc.toString();
+
 					pipeConfigs.push_back({ bdsSF, { iif.width, ifHeight },
 								{ bdsWidth, bdsIntHeight }, gdc });
 				}
@@ -269,6 +286,8 @@ Size calculateGDC(ImgUDevice::Pipe *pipe)
 	gdc.width = main.width * sf;
 	gdc.height = main.height * sf;
 
+	LOG(IMGUPIPE, Debug) << "GDC: " << gdc.toString();
+
 	return gdc;
 }
 
@@ -285,6 +304,11 @@ FOV calcFOV(const Size &in, const ImgUDevice::PipeConfig &pipe)
 
 	fov.w = (inW - (ifCropW + gdcCropW)) / inW;
 	fov.h = (inH - (ifCropH + gdcCropH)) / inH;
+
+	LOG(IMGUPIPE, Debug)
+		<< "IF (" << pipe.iif.toString() << ") - BDS ("
+		<< pipe.bds.toString() << ") - GDC (" << pipe.gdc.toString()
+		<< ") -> FOV: " << fov.w << "x" << fov.h;
 
 	return fov;
 }
