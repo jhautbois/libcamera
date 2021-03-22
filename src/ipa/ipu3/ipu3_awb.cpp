@@ -54,16 +54,10 @@ static const struct ipu3_uapi_awb_config_s imguCssAwbDefaults = {
 	},
 };
 
-static const struct ipu3_uapi_ccm_mat_config imguCssCcm6000k = {
-	6000, 0, 0, 0,
-	0, 4000, 0, 0,
-	0, 0, 10000, 0
-};
-
-static const struct ipu3_uapi_ccm_mat_config imguCssCcm3800k = {
-	9802/*6326*/, 0, 0, 0,
-	0, 10500/*8192*/, 0, 0,
-	0, 0, 15137/*9671*/, 0
+static const struct ipu3_uapi_ccm_mat_config imguCssCcmDefault = {
+	8191, 0, 0, 0,
+	0, 8191, 0, 0,
+	0, 0, 8191, 0
 };
 
 IPU3Awb::IPU3Awb()
@@ -107,7 +101,7 @@ void IPU3Awb::initialise(ipu3_uapi_params &params, const Size &bds)
 	params.acc_param.bnr = imguCssBnrDefaults;
 
 	params.use.acc_ccm = 1;
-	params.acc_param.ccm = imguCssCcm6000k;
+	params.acc_param.ccm = imguCssCcmDefault;
 
 	params.use.acc_gamma = 1;
 	params.acc_param.gamma.gc_ctrl.enable = 1;
@@ -218,7 +212,7 @@ void IPU3Awb::updateWbParameters(ipu3_uapi_params &params, double agcGamma)
 
 		LOG(IPU3Awb, Debug) << "Color temperature estimated: " << cct_
 				    << " and gamma calculated: " << agcGamma;
-		params.acc_param.ccm = imguCssCcm3800k;
+		params.acc_param.ccm = imguCssCcmDefault;
 
 		for (uint32_t i = 0; i < 256; i++) {
 			double j = i / 255.0;
