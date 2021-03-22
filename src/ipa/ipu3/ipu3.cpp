@@ -198,7 +198,7 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 	} else {
 		agcAlgo_->process(stats, exposure_, gain_);
 		/* \todo calculate gains once converged, but not after to avoid flickering */
-		if (agcAlgo_->converged())
+		//if (agcAlgo_->converged())
 			/* \todo calculate it based on BDS */
 			awbAlgo_->calculateWBGains(Rectangle(64, 64, 129 * 8 - 64, 36 * 16 - 64), stats);
 		if (agcAlgo_->updateControls())
