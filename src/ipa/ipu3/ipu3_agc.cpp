@@ -65,7 +65,6 @@ IPU3Agc::~IPU3Agc()
 void IPU3Agc::initialise(struct ipu3_uapi_grid_config &bdsGrid)
 {
 	aeGrid_ = bdsGrid;
-	cellsBrightness_.reserve(IPU3_UAPI_AWB_MAX_BUFFER_SIZE);
 }
 void IPU3Agc::processBrightness(const ipu3_uapi_stats_3a *stats)
 {
@@ -81,7 +80,7 @@ void IPU3Agc::processBrightness(const ipu3_uapi_stats_3a *stats)
 	uint32_t i, j;
 	uint32_t count = 0;
 
-	cellsBrightness_.clear();
+	cellsBrightness_.fill(0);
 
 	for (j = (topleft.y >> aeGrid_.block_height_log2);
 	     j < (topleft.y >> aeGrid_.block_height_log2) + (aeRegion.size().height >> aeGrid_.block_height_log2);
@@ -96,13 +95,11 @@ void IPU3Agc::processBrightness(const ipu3_uapi_stats_3a *stats)
 				uint8_t B = stats->awb_raw_buffer.meta_data[i + 2 + j * aeGrid_.width];
 				uint8_t Gb = stats->awb_raw_buffer.meta_data[i + 3 + j * aeGrid_.width];
 
-				cellsBrightness_.push_back(static_cast<uint32_t>(0.2125 * R + 0.7154 * (Gr + Gb) / 2 + 0.0722 * B));
+				cellsBrightness_[count] = static_cast<uint32_t>(0.299 * R + 0.587 * (Gr + Gb) / 2 + 0.114 * B);
 				count++;
 			}
 		}
 	}
-	std::vector<uint32_t>::iterator maxIntensity = std::max_element(cellsBrightness_.begin(), cellsBrightness_.end());
-	LOG(IPU3Agc, Debug) << "Most frequent intensity is " << *maxIntensity << " at " << std::distance(cellsBrightness_.begin(), maxIntensity);
 
 	/* \todo create a class to generate histograms ! */
 	uint32_t hist[knumHistogramBins] = { 0 };
@@ -125,10 +122,6 @@ void IPU3Agc::processBrightness(const ipu3_uapi_stats_3a *stats)
 	LOG(IPU3Agc, Debug) << "mean value is: " << mean << " and variance is " << variance;
 	/* Limit the gamma effect for now */
 	gamma_ = 1.4;
-
-	const auto [minBrightness, maxBrightness] = std::minmax_element(cellsBrightness_.begin(), cellsBrightness_.end());
-	histLow_ = *minBrightness;
-	histHigh_ = *maxBrightness;
 
 	iqMean_ = Histogram(Span<uint32_t>(hist)).interQuantileMean(0.98, 1.0);
 }

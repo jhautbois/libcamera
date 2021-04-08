@@ -7,8 +7,8 @@
 #ifndef __LIBCAMERA_IPU3_AGC_H__
 #define __LIBCAMERA_IPU3_AGC_H__
 
+#include <array>
 #include <unordered_map>
-#include <vector>
 
 #include <linux/intel-ipu3.h>
 
@@ -43,8 +43,8 @@ private:
 	uint64_t frameCount_;
 	uint64_t lastFrame_;
 
-	/* Vector of calculated brightness for each cell */
-	std::vector<uint32_t> cellsBrightness_;
+	/* Array of calculated brightness for each cell */
+	std::array<uint32_t, IPU3_UAPI_AWB_MAX_BUFFER_SIZE> cellsBrightness_;
 
 	bool converged_;
 	bool updateControls_;

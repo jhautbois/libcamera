@@ -7,6 +7,8 @@
 #ifndef __LIBCAMERA_IPU3_AWB_H__
 #define __LIBCAMERA_IPU3_AWB_H__
 
+#include <array>
+
 #include <linux/intel-ipu3.h>
 
 #include <libcamera/geometry.h>
@@ -36,6 +38,10 @@ private:
 	uint32_t awbCounted_;
 	struct ipu3_uapi_grid_config awbGrid_;
 	uint32_t frame_count_;
+
+	std::array<uint32_t, IPU3_UAPI_AWB_MAX_BUFFER_SIZE> redValues_;
+	std::array<uint32_t, 2 * IPU3_UAPI_AWB_MAX_BUFFER_SIZE> greenValues_;
+	std::array<uint32_t, IPU3_UAPI_AWB_MAX_BUFFER_SIZE> blueValues_;
 };
 
 } /* namespace ipa */

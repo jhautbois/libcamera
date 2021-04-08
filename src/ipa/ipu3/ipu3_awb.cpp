@@ -161,7 +161,6 @@ void IPU3Awb::calculateWBGains(const ipu3_uapi_stats_3a *stats)
 {
 	ASSERT(stats->stats_3a_status.awb_en);
 
-	std::vector<uint32_t> redValues, greenValues, blueValues;
 	const struct ipu3_uapi_grid_config statsAwbGrid = stats->stats_4a_config.awb_config.grid;
 	Rectangle awbRegion = { statsAwbGrid.x_start,
 				statsAwbGrid.y_start,
@@ -175,10 +174,13 @@ void IPU3Awb::calculateWBGains(const ipu3_uapi_stats_3a *stats)
 	uint32_t count = 0;
 	uint32_t i, j;
 
-	redValues.reserve(IPU3_UAPI_AWB_MAX_BUFFER_SIZE);
-	blueValues.reserve(IPU3_UAPI_AWB_MAX_BUFFER_SIZE);
-	/* All Green values will be stored in the same vector, and there is Gr and Gb */
-	greenValues.reserve(2 * IPU3_UAPI_AWB_MAX_BUFFER_SIZE);
+	uint32_t rSum = 0;
+	uint32_t bSum = 0;
+	uint32_t gSum = 0;
+
+	redValues_.fill(0);
+	blueValues_.fill(0);
+	greenValues_.fill(0);
 
 	awbCounted_ = 0;
 	for (j = (topleft.y >> awbGrid_.block_height_log2);
@@ -186,19 +188,23 @@ void IPU3Awb::calculateWBGains(const ipu3_uapi_stats_3a *stats)
 	     j++) {
 		for (i = startX + startY; i < endX + startY; i += 8) {
 			if (stats->awb_raw_buffer.meta_data[i + 4 + j * awbGrid_.width] == 0) {
-				greenValues.push_back(stats->awb_raw_buffer.meta_data[i + j * awbGrid_.width]);
-				redValues.push_back(stats->awb_raw_buffer.meta_data[i + 1 + j * awbGrid_.width]);
-				blueValues.push_back(stats->awb_raw_buffer.meta_data[i + 2 + j * awbGrid_.width]);
-				greenValues.push_back(stats->awb_raw_buffer.meta_data[i + 3 + j * awbGrid_.width]);
+				greenValues_[awbCounted_] = stats->awb_raw_buffer.meta_data[i + j * awbGrid_.width];
+				gSum += greenValues_[awbCounted_];
+				redValues_[awbCounted_] = stats->awb_raw_buffer.meta_data[i + 1 + j * awbGrid_.width];
+				rSum += redValues_[awbCounted_];
+				blueValues_[awbCounted_] = stats->awb_raw_buffer.meta_data[i + 2 + j * awbGrid_.width];
+				bSum += blueValues_[awbCounted_];
+				greenValues_[awbCounted_] += stats->awb_raw_buffer.meta_data[i + 3 + j * awbGrid_.width];
+				gSum += greenValues_[awbCounted_];
 				awbCounted_++;
 			}
 			count++;
 		}
 	}
 
-	double rMean = meanValue(redValues);
-	double bMean = meanValue(blueValues);
-	double gMean = meanValue(greenValues);
+	double rMean = rSum / awbCounted_; //meanValue(redValues_);
+	double bMean = bSum / awbCounted_; //meanValue(blueValues_);
+	double gMean = gSum / awbCounted_ / 2; //meanValue(greenValues_);
 
 	double rGain = gMean / rMean;
 	double bGain = gMean / bMean;
