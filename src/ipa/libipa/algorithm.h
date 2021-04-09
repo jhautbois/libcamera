@@ -15,6 +15,14 @@ class Algorithm
 {
 public:
 	virtual ~Algorithm();
+
+	struct ispStatsRegion {
+		unsigned int counted;
+		unsigned int notcounted;
+		unsigned long long rSum;
+		unsigned long long gSum;
+		unsigned long long bSum;
+	};
 };
 
 } /* namespace ipa */
