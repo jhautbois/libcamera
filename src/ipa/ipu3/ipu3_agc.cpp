@@ -22,27 +22,27 @@ namespace ipa {
 LOG_DEFINE_CATEGORY(IPU3Agc)
 
 /* Number of frames to wait before calculating stats on minimum exposure */
-static const uint32_t kInitialFrameMinAECount = 4;
+static constexpr uint32_t kInitialFrameMinAECount = 4;
 /* Number of frames to wait between new gain/exposure estimations */
-static const uint32_t kFrameSkipCount = 6;
+static constexpr uint32_t kFrameSkipCount = 6;
 
 /* Maximum ISO value for analogue gain */
-static const uint32_t kMinISO = 100;
-static const uint32_t kMaxISO = 1500;
+static constexpr uint32_t kMinISO = 100;
+static constexpr uint32_t kMaxISO = 1500;
 /* Maximum analogue gain value
  * \todo grab it from a camera helper */
-static const uint32_t kMinGain = kMinISO / 100;
-static const uint32_t kMaxGain = kMaxISO / 100;
+static constexpr uint32_t kMinGain = kMinISO / 100;
+static constexpr uint32_t kMaxGain = kMaxISO / 100;
 /* \todo use calculated value based on sensor */
-static const uint32_t kMinExposure = 1;
-static const uint32_t kMaxExposure = 1976;
+static constexpr uint32_t kMinExposure = 1;
+static constexpr uint32_t kMaxExposure = 1976;
 /* \todo those should be get from pipeline handler ! */
 /* line duration in microseconds */
-static const double kLineDuration = 16.8;
-static const double kMaxExposureTime = kMaxExposure * kLineDuration;
+static constexpr double kLineDuration = 16.8;
+static constexpr double kMaxExposureTime = kMaxExposure * kLineDuration;
 /* Histogram constants */
-static const uint32_t knumHistogramBins = 256;
-static const double kEvGainTarget = 0.5;
+static constexpr uint32_t knumHistogramBins = 256;
+static constexpr double kEvGainTarget = 0.5;
 
 IPU3Agc::IPU3Agc()
 	: frameCount_(0), lastFrame_(0),
