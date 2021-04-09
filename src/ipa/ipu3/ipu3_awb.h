@@ -7,7 +7,7 @@
 #ifndef __LIBCAMERA_IPU3_AWB_H__
 #define __LIBCAMERA_IPU3_AWB_H__
 
-#include <array>
+#include <vector>
 
 #include <linux/intel-ipu3.h>
 
@@ -19,6 +19,9 @@ namespace libcamera {
 
 namespace ipa {
 
+static constexpr uint32_t kAwbStatsSizeX = 16;
+static constexpr uint32_t kAwbStatsSizeY = 12;
+
 class IPU3Awb : public Algorithm
 {
 public:
@@ -28,20 +31,41 @@ public:
 	void initialise(ipu3_uapi_params &params, const Size &bdsOutputSize, struct ipu3_uapi_grid_config &bdsGrid);
 	void calculateWBGains(const ipu3_uapi_stats_3a *stats);
 	void updateWbParameters(ipu3_uapi_params &params, double agcGamma);
+	struct RGB {
+		RGB(double _R = 0, double _G = 0, double _B = 0)
+			: R(_R), G(_G), B(_B)
+		{
+		}
+		double R, G, B;
+		RGB &operator+=(RGB const &other)
+		{
+			R += other.R, G += other.G, B += other.B;
+			return *this;
+		}
+	};
+
+	struct AwbStatus {
+		double temperature_K;
+		double redGain;
+		double greenGain;
+		double blueGain;
+	};
 
 private:
+	void generateZones(std::vector<RGB> &zones);
+	void generateAwbStats(const ipu3_uapi_stats_3a *stats);
+	void clearAwbStats();
+	void awbGrey();
 	uint32_t estimateCCT(uint8_t red, uint8_t green, uint8_t blue);
 
 	/* WB calculated gains */
 	uint16_t wbGains_[4];
 	uint32_t cct_;
-	uint32_t awbCounted_;
 	struct ipu3_uapi_grid_config awbGrid_;
 	uint32_t frame_count_;
-
-	std::array<uint32_t, IPU3_UAPI_AWB_MAX_BUFFER_SIZE> redValues_;
-	std::array<uint32_t, 2 * IPU3_UAPI_AWB_MAX_BUFFER_SIZE> greenValues_;
-	std::array<uint32_t, IPU3_UAPI_AWB_MAX_BUFFER_SIZE> blueValues_;
+	std::vector<RGB> zones_;
+	ispStatsRegion awbStats_[kAwbStatsSizeX * kAwbStatsSizeY];
+	AwbStatus asyncResults_;
 };
 
 } /* namespace ipa */

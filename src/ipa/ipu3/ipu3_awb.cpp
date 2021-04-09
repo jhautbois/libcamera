@@ -120,12 +120,13 @@ void IPU3Awb::initialise(ipu3_uapi_params &params, const Size &bdsOutputSize, st
 	params.acc_param.cds.ds_c13 = 0;
 	params.acc_param.cds.ds_nf = 2;
 
-	wbGains_[0] = 16;
+	wbGains_[0] = 4096;
 	wbGains_[1] = 4096;
 	wbGains_[2] = 4096;
-	wbGains_[3] = 16;
+	wbGains_[3] = 4096;
 
 	frame_count_ = 0;
+	zones_.reserve(kAwbStatsSizeX * kAwbStatsSizeY);
 }
 
 uint32_t IPU3Awb::estimateCCT(uint8_t red, uint8_t green, uint8_t blue)
@@ -141,82 +142,116 @@ uint32_t IPU3Awb::estimateCCT(uint8_t red, uint8_t green, uint8_t blue)
 	return static_cast<uint32_t>(449 * n * n * n + 3525 * n * n + 6823.3 * n + 5520.33);
 }
 
-double meanValue(std::vector<uint32_t> colorValues)
+void IPU3Awb::generateZones(std::vector<RGB> &zones)
 {
-	uint32_t count = 0;
-	uint32_t hist[256] = { 0 };
-	for (uint32_t const &val : colorValues) {
-		hist[val]++;
-		count++;
+	for (unsigned int i = 0; i < kAwbStatsSizeX * kAwbStatsSizeY; i++) {
+		RGB zone;
+		double counted = awbStats_[i].counted;
+		if (counted >= 16) {
+			zone.G = awbStats_[i].gSum / counted;
+			if (zone.G >= 32) {
+				zone.R = awbStats_[i].rSum / counted;
+				zone.B = awbStats_[i].bSum / counted;
+				zones.push_back(zone);
+			}
+		}
 	}
+}
 
-	double mean = 0.0;
-	for (uint32_t i = 0; i < 256; i++) {
-		mean += hist[i] * i;
+void IPU3Awb::generateAwbStats(const ipu3_uapi_stats_3a *stats)
+{
+	uint32_t regionWidth = round(awbGrid_.width / static_cast<double>(kAwbStatsSizeX));
+	uint32_t regionHeight = round(awbGrid_.height / static_cast<double>(kAwbStatsSizeY));
+
+	for (unsigned int j = 0; j < kAwbStatsSizeY * regionHeight; j++) {
+		for (unsigned int i = 0; i < kAwbStatsSizeX * regionWidth; i++) {
+			uint32_t cellPosition = j * awbGrid_.width + i;
+			uint32_t cellX = (cellPosition / regionWidth) % kAwbStatsSizeX;
+			uint32_t cellY = ((cellPosition / awbGrid_.width) / regionHeight) % kAwbStatsSizeY;
+
+			uint32_t awbRegionPosition = cellY * kAwbStatsSizeX + cellX;
+			cellPosition *= 8;
+			if (stats->awb_raw_buffer.meta_data[cellPosition + 4] == 0) {
+				/* The cell is not saturated */
+				awbStats_[awbRegionPosition].counted++;
+				uint32_t greenValue = stats->awb_raw_buffer.meta_data[cellPosition + 0] + stats->awb_raw_buffer.meta_data[cellPosition + 3];
+				awbStats_[awbRegionPosition].gSum += greenValue / 2;
+				awbStats_[awbRegionPosition].rSum += stats->awb_raw_buffer.meta_data[cellPosition + 1];
+				awbStats_[awbRegionPosition].bSum += stats->awb_raw_buffer.meta_data[cellPosition + 2];
+			}
+		}
 	}
-	return mean /= count;
+}
+
+void IPU3Awb::clearAwbStats()
+{
+	for (unsigned int i = 0; i < kAwbStatsSizeX * kAwbStatsSizeY; i++) {
+		awbStats_[i].bSum = 0;
+		awbStats_[i].rSum = 0;
+		awbStats_[i].gSum = 0;
+		awbStats_[i].counted = 0;
+		awbStats_[i].notcounted = 0;
+	}
+}
+
+void IPU3Awb::awbGrey()
+{
+	LOG(IPU3Awb, Debug) << "Grey world AWB";
+	/**
+	 * Make a separate list of the derivatives for each of red and blue, so
+	 * that we can sort them to exclude the extreme gains.  We could
+	 * consider some variations, such as normalising all the zones first, or
+	 * doing an L2 average etc.
+	 */
+	std::vector<RGB> &redDerivative(zones_);
+	std::vector<RGB> blueDerivative(redDerivative);
+	std::sort(redDerivative.begin(), redDerivative.end(),
+		  [](RGB const &a, RGB const &b) {
+			  return a.G * b.R < b.G * a.R;
+		  });
+	std::sort(blueDerivative.begin(), blueDerivative.end(),
+		  [](RGB const &a, RGB const &b) {
+			  return a.G * b.B < b.G * a.B;
+		  });
+
+	/* Average the middle half of the values. */
+	int discard = redDerivative.size() / 4;
+	RGB sumRed(0, 0, 0), sumBlue(0, 0, 0);
+	for (auto ri = redDerivative.begin() + discard,
+		  bi = blueDerivative.begin() + discard;
+	     ri != redDerivative.end() - discard; ri++, bi++)
+		sumRed += *ri, sumBlue += *bi;
+
+	double redGain = sumRed.G / (sumRed.R + 1),
+	       blueGain = sumBlue.G / (sumBlue.B + 1);
+
+	/* Color temperature is not relevant in Gray world */
+	asyncResults_.temperature_K = 4500;
+	asyncResults_.redGain = redGain;
+	asyncResults_.greenGain = 1.0;
+	asyncResults_.blueGain = blueGain;
 }
 
 void IPU3Awb::calculateWBGains(const ipu3_uapi_stats_3a *stats)
 {
 	ASSERT(stats->stats_3a_status.awb_en);
+	zones_.clear();
+	clearAwbStats();
+	generateAwbStats(stats);
+	generateZones(zones_);
+	LOG(IPU3Awb, Debug) << "Valid zones: " << zones_.size();
+	if (zones_.size() > 10)
+		awbGrey();
 
-	const struct ipu3_uapi_grid_config statsAwbGrid = stats->stats_4a_config.awb_config.grid;
-	Rectangle awbRegion = { statsAwbGrid.x_start,
-				statsAwbGrid.y_start,
-				static_cast<unsigned int>(statsAwbGrid.x_end - statsAwbGrid.x_start) + 1,
-				static_cast<unsigned int>(statsAwbGrid.y_end - statsAwbGrid.y_start) + 1 };
+	LOG(IPU3Awb, Debug) << "Gain found for red: " << asyncResults_.redGain
+			    << " and for blue: " << asyncResults_.blueGain;
 
-	Point topleft = awbRegion.topLeft();
-	uint32_t startY = (topleft.y >> awbGrid_.block_height_log2) * awbGrid_.width << awbGrid_.block_width_log2;
-	uint32_t startX = (topleft.x >> awbGrid_.block_width_log2) << awbGrid_.block_width_log2;
-	uint32_t endX = (startX + (awbRegion.size().width >> awbGrid_.block_width_log2)) << awbGrid_.block_width_log2;
-	uint32_t count = 0;
-	uint32_t i, j;
-
-	uint32_t rSum = 0;
-	uint32_t bSum = 0;
-	uint32_t gSum = 0;
-
-	redValues_.fill(0);
-	blueValues_.fill(0);
-	greenValues_.fill(0);
-
-	awbCounted_ = 0;
-	for (j = (topleft.y >> awbGrid_.block_height_log2);
-	     j < (topleft.y >> awbGrid_.block_height_log2) + (awbRegion.size().height >> awbGrid_.block_height_log2);
-	     j++) {
-		for (i = startX + startY; i < endX + startY; i += 8) {
-			if (stats->awb_raw_buffer.meta_data[i + 4 + j * awbGrid_.width] == 0) {
-				greenValues_[awbCounted_] = stats->awb_raw_buffer.meta_data[i + j * awbGrid_.width];
-				gSum += greenValues_[awbCounted_];
-				redValues_[awbCounted_] = stats->awb_raw_buffer.meta_data[i + 1 + j * awbGrid_.width];
-				rSum += redValues_[awbCounted_];
-				blueValues_[awbCounted_] = stats->awb_raw_buffer.meta_data[i + 2 + j * awbGrid_.width];
-				bSum += blueValues_[awbCounted_];
-				greenValues_[awbCounted_] += stats->awb_raw_buffer.meta_data[i + 3 + j * awbGrid_.width];
-				gSum += greenValues_[awbCounted_];
-				awbCounted_++;
-			}
-			count++;
-		}
-	}
-
-	double rMean = rSum / awbCounted_; //meanValue(redValues_);
-	double bMean = bSum / awbCounted_; //meanValue(blueValues_);
-	double gMean = gSum / awbCounted_ / 2; //meanValue(greenValues_);
-
-	double rGain = gMean / rMean;
-	double bGain = gMean / bMean;
-
-	wbGains_[0] = 16;
-	wbGains_[1] = 4096 * rGain;
-	wbGains_[2] = 4096 * bGain;
-	wbGains_[3] = 16;
+	wbGains_[0] = 1024 * asyncResults_.greenGain;
+	wbGains_[1] = 4096 * asyncResults_.redGain;
+	wbGains_[2] = 4096 * asyncResults_.blueGain;
+	wbGains_[3] = 1024 * asyncResults_.greenGain;
 
 	frame_count_++;
-
-	cct_ = estimateCCT(rMean, gMean, bMean);
 }
 
 void IPU3Awb::updateWbParameters(ipu3_uapi_params &params, double agcGamma)
