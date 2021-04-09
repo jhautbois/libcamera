@@ -192,6 +192,9 @@ void IPU3Awb::clearAwbStats()
 		awbStats_[i].counted = 0;
 		awbStats_[i].notcounted = 0;
 	}
+	asyncResults_.redGain = 1.0;
+	asyncResults_.blueGain = 1.0;
+	asyncResults_.greenGain = 1.0;
 }
 
 void IPU3Awb::awbGrey()
@@ -256,23 +259,19 @@ void IPU3Awb::calculateWBGains(const ipu3_uapi_stats_3a *stats)
 
 void IPU3Awb::updateWbParameters(ipu3_uapi_params &params, double agcGamma)
 {
-	if ((wbGains_[0] == 0) || (wbGains_[1] == 0) || (wbGains_[2] == 0) || (wbGains_[3] == 0)) {
-		LOG(IPU3Awb, Error) << "Gains can't be 0, check the stats";
-	} else {
-		params.acc_param.bnr.wb_gains.gr = wbGains_[0];
-		params.acc_param.bnr.wb_gains.r = wbGains_[1];
-		params.acc_param.bnr.wb_gains.b = wbGains_[2];
-		params.acc_param.bnr.wb_gains.gb = wbGains_[3];
+	params.acc_param.bnr.wb_gains.gr = wbGains_[0];
+	params.acc_param.bnr.wb_gains.r = wbGains_[1];
+	params.acc_param.bnr.wb_gains.b = wbGains_[2];
+	params.acc_param.bnr.wb_gains.gb = wbGains_[3];
 
-		LOG(IPU3Awb, Debug) << "Color temperature estimated: " << cct_
-				    << " and gamma calculated: " << agcGamma;
-		params.acc_param.ccm = imguCssCcmDefault;
+	LOG(IPU3Awb, Debug) << "Color temperature estimated: " << cct_
+			    << " and gamma calculated: " << agcGamma;
+	params.acc_param.ccm = imguCssCcmDefault;
 
-		for (uint32_t i = 0; i < 256; i++) {
-			double j = i / 255.0;
-			double gamma = std::pow(j, 1.0 / agcGamma);
-			params.acc_param.gamma.gc_lut.lut[i] = gamma * 8191;
-		}
+	for (uint32_t i = 0; i < 256; i++) {
+		double j = i / 255.0;
+		double gamma = std::pow(j, 1.0 / agcGamma);
+		params.acc_param.gamma.gc_lut.lut[i] = gamma * 8191;
 	}
 }
 
