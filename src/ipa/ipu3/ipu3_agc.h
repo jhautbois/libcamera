@@ -7,7 +7,6 @@
 #ifndef __LIBCAMERA_IPU3_AGC_H__
 #define __LIBCAMERA_IPU3_AGC_H__
 
-#include <array>
 #include <unordered_map>
 
 #include <linux/intel-ipu3.h>
@@ -19,6 +18,9 @@
 namespace libcamera {
 
 namespace ipa {
+
+static constexpr uint32_t kAgcStatsSizeX = 4;
+static constexpr uint32_t kAgcStatsSizeY = 4;
 
 class IPU3Agc : public Algorithm
 {
@@ -34,6 +36,9 @@ public:
 	double gamma() { return gamma_; }
 
 private:
+	double compute_initial_Y(double weights[], double gain);
+	void generateAgcStats(const ipu3_uapi_stats_3a *stats);
+	void clearAgcStats();
 	void processBrightness(const ipu3_uapi_stats_3a *stats);
 	void filterExposure(bool desaturate);
 	void lockExposureGain(uint32_t &exposure, uint32_t &gain);
@@ -42,9 +47,6 @@ private:
 
 	uint64_t frameCount_;
 	uint64_t lastFrame_;
-
-	/* Array of calculated brightness for each cell */
-	std::array<uint32_t, IPU3_UAPI_AWB_MAX_BUFFER_SIZE> cellsBrightness_;
 
 	bool converged_;
 	bool updateControls_;
@@ -58,6 +60,8 @@ private:
 	double prevTotalExposureNoDg_;
 	double currentTotalExposure_;
 	double currentTotalExposureNoDg_;
+
+	ispStatsRegion agcStats_[kAgcStatsSizeX * kAgcStatsSizeY];
 };
 
 } /* namespace ipa */

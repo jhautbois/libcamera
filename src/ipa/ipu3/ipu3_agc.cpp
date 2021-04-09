@@ -66,6 +66,69 @@ void IPU3Agc::initialise(struct ipu3_uapi_grid_config &bdsGrid)
 {
 	aeGrid_ = bdsGrid;
 }
+
+double IPU3Agc::compute_initial_Y(double weights[], double gain)
+{
+	ispStatsRegion *regions = agcStats_;
+	// Note how the calculation below means that equal weights give you
+	// "average" metering (i.e. all pixels equally important).
+	double redSum = 0, greenSum = 0, blueSum = 0, pixelSum = 0;
+	for (unsigned int i = 0; i < kAgcStatsSizeX * kAgcStatsSizeY; i++) {
+		double counted = regions[i].counted;
+		double rSum = std::min(regions[i].rSum * gain, ((1 << 8) - 1) * counted);
+		double gSum = std::min(regions[i].gSum * gain, ((1 << 8) - 1) * counted);
+		double bSum = std::min(regions[i].bSum * gain, ((1 << 8) - 1) * counted);
+		redSum += rSum * weights[i];
+		greenSum += gSum * weights[i];
+		blueSum += bSum * weights[i];
+		pixelSum += counted * weights[i];
+	}
+	if (pixelSum == 0.0) {
+		LOG(IPU3Agc, Warning) << "compute_initial_Y: pixel_sum is zero";
+		return 0;
+	}
+	double Y_sum = redSum * 1.68 * .299 +
+		       greenSum * 1.0 * .587 +
+		       blueSum * 1.72 * .114;
+	return Y_sum / pixelSum / (1 << 8);
+}
+
+void IPU3Agc::generateAgcStats(const ipu3_uapi_stats_3a *stats)
+{
+	uint32_t regionWidth = round(aeGrid_.width / static_cast<double>(kAgcStatsSizeX));
+	uint32_t regionHeight = round(aeGrid_.height / static_cast<double>(kAgcStatsSizeY));
+
+	for (unsigned int j = 0; j < kAgcStatsSizeY * regionHeight; j++) {
+		for (unsigned int i = 0; i < kAgcStatsSizeX * regionWidth; i++) {
+			uint32_t cellPosition = j * aeGrid_.width + i;
+			uint32_t cellX = (cellPosition / regionWidth) % kAgcStatsSizeX;
+			uint32_t cellY = ((cellPosition / aeGrid_.width) / regionHeight) % kAgcStatsSizeY;
+
+			uint32_t awbRegionPosition = cellY * kAgcStatsSizeX + cellX;
+			cellPosition *= 8;
+			if (stats->awb_raw_buffer.meta_data[cellPosition + 4] == 0) {
+				/* The cell is not saturated */
+				agcStats_[awbRegionPosition].counted++;
+				uint32_t greenValue = stats->awb_raw_buffer.meta_data[cellPosition + 0] + stats->awb_raw_buffer.meta_data[cellPosition + 3];
+				agcStats_[awbRegionPosition].gSum += greenValue / 2;
+				agcStats_[awbRegionPosition].rSum += stats->awb_raw_buffer.meta_data[cellPosition + 1];
+				agcStats_[awbRegionPosition].bSum += stats->awb_raw_buffer.meta_data[cellPosition + 2];
+			}
+		}
+	}
+}
+
+void IPU3Agc::clearAgcStats()
+{
+	for (unsigned int i = 0; i < kAgcStatsSizeX * kAgcStatsSizeY; i++) {
+		agcStats_[i].bSum = 0;
+		agcStats_[i].rSum = 0;
+		agcStats_[i].gSum = 0;
+		agcStats_[i].counted = 0;
+		agcStats_[i].notcounted = 0;
+	}
+}
+
 void IPU3Agc::processBrightness(const ipu3_uapi_stats_3a *stats)
 {
 	const struct ipu3_uapi_grid_config statsAeGrid = stats->stats_4a_config.awb_config.grid;
@@ -80,7 +143,8 @@ void IPU3Agc::processBrightness(const ipu3_uapi_stats_3a *stats)
 	uint32_t i, j;
 	uint32_t count = 0;
 
-	cellsBrightness_.fill(0);
+	uint32_t brightness = 0;
+	uint32_t hist[knumHistogramBins] = { 0 };
 
 	for (j = (topleft.y >> aeGrid_.block_height_log2);
 	     j < (topleft.y >> aeGrid_.block_height_log2) + (aeRegion.size().height >> aeGrid_.block_height_log2);
@@ -95,16 +159,12 @@ void IPU3Agc::processBrightness(const ipu3_uapi_stats_3a *stats)
 				uint8_t B = stats->awb_raw_buffer.meta_data[i + 2 + j * aeGrid_.width];
 				uint8_t Gb = stats->awb_raw_buffer.meta_data[i + 3 + j * aeGrid_.width];
 
-				cellsBrightness_[count] = static_cast<uint32_t>(0.299 * R + 0.587 * (Gr + Gb) / 2 + 0.114 * B);
+				brightness = 0.299 * R + 0.587 * (Gr + Gb) / 2 + 0.114 * B;
+				hist[(Gr + Gb) / 2]++;
 				count++;
 			}
 		}
 	}
-
-	/* \todo create a class to generate histograms ! */
-	uint32_t hist[knumHistogramBins] = { 0 };
-	for (uint32_t const &val : cellsBrightness_)
-		hist[val]++;
 
 	double mean = 0.0;
 	for (i = 0; i < knumHistogramBins; i++) {
@@ -212,6 +272,21 @@ void IPU3Agc::lockExposureGain(uint32_t &exposure, uint32_t &gain)
 
 void IPU3Agc::process(const ipu3_uapi_stats_3a *stats, uint32_t &exposure, uint32_t &gain)
 {
+	clearAgcStats();
+	generateAgcStats(stats);
+
+	double mygain = 1.0;
+	double weights[16] = { 1, 1, 1, 1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 1, 1, 1 };
+	double targetY = 0.9;
+
+	for (int i = 0; i < 8; i++) {
+		double initial_Y = compute_initial_Y(weights, mygain);
+		double extra_gain = std::min(10.0, targetY / (initial_Y + .001));
+		mygain *= extra_gain;
+		LOG(IPU3Agc, Debug) << "Initial Y " << initial_Y << " target " << targetY
+				    << " gives gain " << mygain;
+	}
+
 	processBrightness(stats);
 	lockExposureGain(exposure, gain);
 	frameCount_++;
