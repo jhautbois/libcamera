@@ -21,10 +21,11 @@
 #include "libcamera/internal/buffer.h"
 #include "libcamera/internal/log.h"
 
+#include "ipu3_agc.h"
 #include "ipu3_awb.h"
 
 static constexpr uint32_t kMaxCellWidthPerSet = 160;
-static constexpr uint32_t kMaxCellHeightPerSet = 80;
+static constexpr uint32_t kMaxCellHeightPerSet = 56;
 
 namespace libcamera {
 
@@ -70,6 +71,8 @@ private:
 
 	/* Interface to the AWB algorithm */
 	std::unique_ptr<ipa::IPU3Awb> awbAlgo_;
+	/* Interface to the AEC/AGC algorithm */
+	std::unique_ptr<ipa::IPU3Agc> agcAlgo_;
 
 	/* Local parameter storage */
 	struct ipu3_uapi_params params_;
@@ -168,6 +171,9 @@ void IPAIPU3::configure(const std::map<uint32_t, ControlInfoMap> &entityControls
 
 	awbAlgo_ = std::make_unique<ipa::IPU3Awb>();
 	awbAlgo_->initialise(params_, bdsOutputSize, bdsGrid_);
+
+	agcAlgo_ = std::make_unique<ipa::IPU3Agc>();
+	agcAlgo_->initialise(bdsGrid_);
 }
 
 void IPAIPU3::mapBuffers(const std::vector<IPABuffer> &buffers)
@@ -239,8 +245,8 @@ void IPAIPU3::processControls([[maybe_unused]] unsigned int frame,
 
 void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params)
 {
-	/* Pass a default gamma of 1.0 (default linear correction) */
-	awbAlgo_->updateWbParameters(params_, 1.0);
+	if (agcAlgo_->updateControls())
+		awbAlgo_->updateWbParameters(params_, agcAlgo_->gamma());
 
 	*params = params_;
 
@@ -255,7 +261,11 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 {
 	ControlList ctrls(controls::controls);
 
+	agcAlgo_->process(stats, exposure_, gain_);
 	awbAlgo_->calculateWBGains(stats);
+
+	if (agcAlgo_->updateControls())
+		setControls(frame);
 
 	ipa::ipu3::IPU3Action op;
 	op.op = ipa::ipu3::ActionMetadataReady;
