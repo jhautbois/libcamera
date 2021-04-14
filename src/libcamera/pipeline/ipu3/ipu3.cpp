@@ -46,7 +46,7 @@ static constexpr unsigned int IMGU_OUTPUT_WIDTH_ALIGN = 64;
 static constexpr unsigned int IMGU_OUTPUT_HEIGHT_ALIGN = 4;
 static constexpr unsigned int IMGU_OUTPUT_WIDTH_MARGIN = 64;
 static constexpr unsigned int IMGU_OUTPUT_HEIGHT_MARGIN = 32;
-static constexpr Size IPU3ViewfinderSize(1280, 720);
+static constexpr Size IPU3ViewfinderSize(1920, 1080);
 
 static const ControlInfoMap::Map IPU3Controls = {
 	{ &controls::draft::PipelineDepth, ControlInfo(2, 3) },
@@ -442,8 +442,7 @@ CameraConfiguration *PipelineHandlerIPU3::generateConfiguration(Camera *camera,
 			break;
 		}
 
-		case StreamRole::Viewfinder:
-		case StreamRole::VideoRecording: {
+		case StreamRole::Viewfinder: {
 			/*
 			 * Default viewfinder and videorecording to 1280x720,
 			 * capped to the maximum sensor resolution and aligned
@@ -452,9 +451,32 @@ CameraConfiguration *PipelineHandlerIPU3::generateConfiguration(Camera *camera,
 			size = sensorResolution.boundedTo(IPU3ViewfinderSize)
 					       .alignedDownTo(IMGU_OUTPUT_WIDTH_ALIGN,
 							      IMGU_OUTPUT_HEIGHT_ALIGN);
+
 			pixelFormat = formats::NV12;
 			bufferCount = IPU3_BUFFER_COUNT;
-			streamFormats[pixelFormat] = { { IMGU_OUTPUT_MIN_SIZE, size } };
+			streamFormats[pixelFormat] = { { IPU3ViewfinderSize, size } };
+			break;
+		}
+
+		case StreamRole::VideoRecording: {
+			/*
+			 * Default videorecording capped to the maximum sensor
+			 * resolution and aligned to the ImgU output constraints.
+			 */
+			size = sensorResolution.alignedDownTo(IMGU_OUTPUT_WIDTH_ALIGN,
+							      IMGU_OUTPUT_HEIGHT_ALIGN);
+
+			/*
+			 * Limit the minimum size to either 640x480, or the
+			 * sensor size if it is smaller
+			 */
+			Size minSize = sensorResolution.boundedTo({ 640, 480 })
+					       .alignedDownTo(IMGU_OUTPUT_WIDTH_ALIGN,
+							      IMGU_OUTPUT_HEIGHT_ALIGN);
+
+			pixelFormat = formats::NV12;
+			bufferCount = IPU3_BUFFER_COUNT;
+			streamFormats[pixelFormat] = { { minSize, size } };
 
 			break;
 		}

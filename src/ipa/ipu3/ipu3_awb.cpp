@@ -58,7 +58,7 @@ LOG_DEFINE_CATEGORY(IPU3Awb)
 
 /* Default settings for Bayer noise reduction replicated from the Kernel */
 static const struct ipu3_uapi_bnr_static_config imguCssBnrDefaults = {
-	.wb_gains = { 16, 16, 16, 16 },
+	.wb_gains = { 16, 8192, 8192, 16 },
 	.wb_gains_thr = { 255, 255, 255, 255 },
 	.thr_coeffs = { 1700, 0, 31, 31, 0, 16 },
 	.thr_ctrl_shd = { 26, 26, 26, 26 },
@@ -103,10 +103,6 @@ static const struct ipu3_uapi_ccm_mat_config imguCssCcmDefault = {
 IPU3Awb::IPU3Awb()
 	: Algorithm()
 {
-	asyncResults_.blueGain = 1.0;
-	asyncResults_.greenGain = 1.0;
-	asyncResults_.redGain = 1.0;
-	asyncResults_.temperature_K = 4500;
 }
 
 IPU3Awb::~IPU3Awb()
@@ -142,6 +138,10 @@ void IPU3Awb::initialise(ipu3_uapi_params &params, const Size &bdsOutputSize, st
 	params.use.acc_gamma = 1;
 	params.acc_param.gamma.gc_ctrl.enable = 1;
 
+	asyncResults_.blueGain = 1.0;
+	asyncResults_.greenGain = 1.0;
+	asyncResults_.redGain = 1.0;
+	asyncResults_.temperature_K = 4500;
 	zones_.reserve(kAwbStatsSizeX * kAwbStatsSizeY);
 }
 
@@ -180,7 +180,7 @@ void IPU3Awb::generateZones(std::vector<RGB> &zones)
 	for (unsigned int i = 0; i < kAwbStatsSizeX * kAwbStatsSizeY; i++) {
 		RGB zone;
 		double counted = awbStats_[i].counted;
-		if (counted >= 16) {
+		if (counted >= 2) {
 			zone.G = awbStats_[i].gSum / counted;
 			if (zone.G >= 32) {
 				zone.R = awbStats_[i].rSum / counted;
@@ -286,17 +286,18 @@ void IPU3Awb::updateWbParameters(ipu3_uapi_params &params, double agcGamma)
 	/**
 	 * Green gains should not be touched and considered 1.
 	 * Default is 16, so do not change it at all.
-	 * 4096 is the value for a gain of 1.0
+	 * 8192 is the value for a gain of 1.0
 	 */
-	params.acc_param.bnr.wb_gains.gr = 16;
-	params.acc_param.bnr.wb_gains.r = 4096 * asyncResults_.redGain;
-	params.acc_param.bnr.wb_gains.b = 4096 * asyncResults_.blueGain;
-	params.acc_param.bnr.wb_gains.gb = 16;
+	params.acc_param.bnr.wb_gains.gr = 4096;
+	params.acc_param.bnr.wb_gains.r = 8192 * asyncResults_.redGain;
+	params.acc_param.bnr.wb_gains.b = 8192 * asyncResults_.blueGain;
+	params.acc_param.bnr.wb_gains.gb = 4096;
 
-	LOG(IPU3Awb, Debug) << "Color temperature estimated: " << asyncResults_.temperature_K
+	LOG(IPU3Awb, Error) << "Color temperature estimated: " << asyncResults_.temperature_K
 			    << " and gamma calculated: " << agcGamma;
 
 	params.acc_param.ccm = imguCssCcmDefault;
+
 	for (uint32_t i = 0; i < 256; i++) {
 		double j = i / 255.0;
 		double gamma = std::pow(j, 1.0 / agcGamma);
