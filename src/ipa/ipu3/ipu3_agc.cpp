@@ -98,7 +98,7 @@ void IPU3Agc::processBrightness(const ipu3_uapi_stats_3a *stats)
 	}
 
 	/* Limit the gamma effect for now */
-	gamma_ = 1.4;
+	gamma_ = 1.1;
 
 	iqMean_ = Histogram(Span<uint32_t>(hist)).interQuantileMean(0.98, 1.0);
 }

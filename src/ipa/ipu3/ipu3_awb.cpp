@@ -259,7 +259,7 @@ void IPU3Awb::awbGrey()
 	double redGain = sumRed.G / (sumRed.R + 1),
 	       blueGain = sumBlue.G / (sumBlue.B + 1);
 
-	/* Color temperature is not relevant in Gray world */
+	/* Color temperature is not relevant in Gray world but still useful to estimate it :-) */
 	asyncResults_.temperature_K = estimateCCT(sumRed.R, sumRed.G, sumBlue.B);
 	asyncResults_.redGain = redGain;
 	asyncResults_.greenGain = 1.0;
@@ -283,10 +283,15 @@ void IPU3Awb::calculateWBGains(const ipu3_uapi_stats_3a *stats)
 
 void IPU3Awb::updateWbParameters(ipu3_uapi_params &params, double agcGamma)
 {
-	params.acc_param.bnr.wb_gains.gr = 16 * asyncResults_.greenGain;
+	/**
+	 * Green gains should not be touched and considered 1.
+	 * Default is 16, so do not change it at all.
+	 * 4096 is the value for a gain of 1.0
+	 */
+	params.acc_param.bnr.wb_gains.gr = 16;
 	params.acc_param.bnr.wb_gains.r = 4096 * asyncResults_.redGain;
 	params.acc_param.bnr.wb_gains.b = 4096 * asyncResults_.blueGain;
-	params.acc_param.bnr.wb_gains.gb = 16 * asyncResults_.greenGain;
+	params.acc_param.bnr.wb_gains.gb = 16;
 
 	LOG(IPU3Awb, Debug) << "Color temperature estimated: " << asyncResults_.temperature_K
 			    << " and gamma calculated: " << agcGamma;

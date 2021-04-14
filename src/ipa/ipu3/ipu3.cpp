@@ -25,7 +25,7 @@
 #include "ipu3_awb.h"
 
 static constexpr uint32_t kMaxCellWidthPerSet = 160;
-static constexpr uint32_t kMaxCellHeightPerSet = 80;
+static constexpr uint32_t kMaxCellHeightPerSet = 56;
 
 namespace libcamera {
 
