@@ -22,49 +22,6 @@ static constexpr uint32_t kMinZonesCounted = 16;
 static constexpr uint32_t kMinGreenLevelInZone = 32;
 
 /**
- * \struct IspStatsRegion
- * \brief RGB statistics for a given region
- *
- * The IspStatsRegion structure is intended to abstract the ISP specific
- * statistics and use an agnostic algorithm to compute AWB.
- *
- * \var IspStatsRegion::counted
- * \brief Number of pixels used to calculate the sums
- *
- * \var IspStatsRegion::uncounted
- * \brief Remaining number of pixels in the region
- *
- * \var IspStatsRegion::rSum
- * \brief Sum of the red values in the region
- *
- * \var IspStatsRegion::gSum
- * \brief Sum of the green values in the region
- *
- * \var IspStatsRegion::bSum
- * \brief Sum of the blue values in the region
- */
-
-/**
- * \struct AwbStatus
- * \brief AWB parameters calculated
- *
- * The AwbStatus structure is intended to store the AWB
- * parameters calculated by the algorithm
- *
- * \var AwbStatus::temperatureK
- * \brief Color temperature calculated
- *
- * \var AwbStatus::redGain
- * \brief Gain calculated for the red channel
- *
- * \var AwbStatus::greenGain
- * \brief Gain calculated for the green channel
- *
- * \var AwbStatus::blueGain
- * \brief Gain calculated for the blue channel
- */
-
-/**
  * \struct Ipu3AwbCell
  * \brief Memory layout for each cell in AWB metadata
  *

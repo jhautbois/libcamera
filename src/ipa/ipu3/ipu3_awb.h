@@ -14,6 +14,7 @@
 #include <libcamera/geometry.h>
 
 #include "libipa/algorithm.h"
+#include "libipa/isp.h"
 
 namespace libcamera {
 
@@ -41,35 +42,6 @@ public:
 		unsigned char satRatio;
 		unsigned char padding[3];
 	} __attribute__((packed));
-
-	/* \todo Make these three structs available to all the ISPs ? */
-	struct RGB {
-		RGB(double _R = 0, double _G = 0, double _B = 0)
-			: R(_R), G(_G), B(_B)
-		{
-		}
-		double R, G, B;
-		RGB &operator+=(RGB const &other)
-		{
-			R += other.R, G += other.G, B += other.B;
-			return *this;
-		}
-	};
-
-	struct IspStatsRegion {
-		unsigned int counted;
-		unsigned int uncounted;
-		unsigned long long rSum;
-		unsigned long long gSum;
-		unsigned long long bSum;
-	};
-
-	struct AwbStatus {
-		double temperatureK;
-		double redGain;
-		double greenGain;
-		double blueGain;
-	};
 
 private:
 	void generateZones(std::vector<RGB> &zones);
