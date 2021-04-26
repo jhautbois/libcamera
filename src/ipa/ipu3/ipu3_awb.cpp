@@ -11,6 +11,7 @@
 #include <unordered_map>
 
 #include <libcamera/base/log.h>
+#include "libipa/awb.h"
 
 namespace libcamera {
 
@@ -210,36 +211,6 @@ void IPU3Awb::initialise(ipu3_uapi_params &params, const Size &bdsOutputSize, st
 	zones_.reserve(kAwbStatsSizeX * kAwbStatsSizeY);
 }
 
-/**
- * The function estimates the correlated color temperature using
- * from RGB color space input.
- * In physics and color science, the Planckian locus or black body locus is
- * the path or locus that the color of an incandescent black body would take
- * in a particular chromaticity space as the blackbody temperature changes.
- *
- * If a narrow range of color temperatures is considered (those encapsulating
- * daylight being the most practical case) one can approximate the Planckian
- * locus in order to calculate the CCT in terms of chromaticity coordinates.
- *
- * More detailed information can be found in:
- * https://en.wikipedia.org/wiki/Color_temperature#Approximation
- */
-uint32_t IPU3Awb::estimateCCT(double red, double green, double blue)
-{
-	/* Convert the RGB values to CIE tristimulus values (XYZ) */
-	double X = (-0.14282) * (red) + (1.54924) * (green) + (-0.95641) * (blue);
-	double Y = (-0.32466) * (red) + (1.57837) * (green) + (-0.73191) * (blue);
-	double Z = (-0.68202) * (red) + (0.77073) * (green) + (0.56332) * (blue);
-
-	/* Calculate the normalized chromaticity values */
-	double x = X / (X + Y + Z);
-	double y = Y / (X + Y + Z);
-
-	/* Calculate CCT */
-	double n = (x - 0.3320) / (0.1858 - y);
-	return 449 * n * n * n + 3525 * n * n + 6823.3 * n + 5520.33;
-}
-
 /* Generate an RGB vector with the average values for each region */
 void IPU3Awb::generateZones(std::vector<RGB> &zones)
 {
@@ -302,46 +273,6 @@ void IPU3Awb::clearAwbStats()
 	}
 }
 
-void IPU3Awb::awbGreyWorld()
-{
-	LOG(IPU3Awb, Debug) << "Grey world AWB";
-	/*
-	 * Make a separate list of the derivatives for each of red and blue, so
-	 * that we can sort them to exclude the extreme gains. We could
-	 * consider some variations, such as normalising all the zones first, or
-	 * doing an L2 average etc.
-	 */
-	std::vector<RGB> &redDerivative(zones_);
-	std::vector<RGB> blueDerivative(redDerivative);
-	std::sort(redDerivative.begin(), redDerivative.end(),
-		  [](RGB const &a, RGB const &b) {
-			  return a.G * b.R < b.G * a.R;
-		  });
-	std::sort(blueDerivative.begin(), blueDerivative.end(),
-		  [](RGB const &a, RGB const &b) {
-			  return a.G * b.B < b.G * a.B;
-		  });
-
-	/* Average the middle half of the values. */
-	int discard = redDerivative.size() / 4;
-
-	RGB sumRed(0, 0, 0);
-	RGB sumBlue(0, 0, 0);
-	for (auto ri = redDerivative.begin() + discard,
-		  bi = blueDerivative.begin() + discard;
-	     ri != redDerivative.end() - discard; ri++, bi++)
-		sumRed += *ri, sumBlue += *bi;
-
-	double redGain = sumRed.G / (sumRed.R + 1),
-	       blueGain = sumBlue.G / (sumBlue.B + 1);
-
-	/* Color temperature is not relevant in Grey world but still useful to estimate it :-) */
-	asyncResults_.temperatureK = estimateCCT(sumRed.R, sumRed.G, sumBlue.B);
-	asyncResults_.redGain = redGain;
-	asyncResults_.greenGain = 1.0;
-	asyncResults_.blueGain = blueGain;
-}
-
 void IPU3Awb::calculateWBGains(const ipu3_uapi_stats_3a *stats)
 {
 	ASSERT(stats->stats_3a_status.awb_en);
@@ -351,7 +282,7 @@ void IPU3Awb::calculateWBGains(const ipu3_uapi_stats_3a *stats)
 	generateZones(zones_);
 	LOG(IPU3Awb, Debug) << "Valid zones: " << zones_.size();
 	if (zones_.size() > 10) {
-		awbGreyWorld();
+		awbGreyWorld(zones_, asyncResults_);
 		LOG(IPU3Awb, Debug) << "Gain found for red: " << asyncResults_.redGain
 				    << " and for blue: " << asyncResults_.blueGain;
 	}

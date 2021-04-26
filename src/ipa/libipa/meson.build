@@ -2,12 +2,14 @@
 
 libipa_headers = files([
     'algorithm.h',
+    'awb.h',
     'camera_sensor_helper.h',
     'histogram.h'
 ])
 
 libipa_sources = files([
     'algorithm.cpp',
+    'awb.cpp',
     'camera_sensor_helper.cpp',
     'histogram.cpp'
 ])
