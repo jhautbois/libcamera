@@ -282,7 +282,7 @@ void IPU3Awb::calculateWBGains(const ipu3_uapi_stats_3a *stats)
 	generateZones(zones_);
 	LOG(IPU3Awb, Debug) << "Valid zones: " << zones_.size();
 	if (zones_.size() > 10) {
-		awbGreyWorld(zones_, asyncResults_);
+		ipa::awbGreyWorld(zones_, asyncResults_);
 		LOG(IPU3Awb, Debug) << "Gain found for red: " << asyncResults_.redGain
 				    << " and for blue: " << asyncResults_.blueGain;
 	}
