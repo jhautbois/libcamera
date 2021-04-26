@@ -24,6 +24,8 @@
 #include <libcamera/ipa/rkisp1_ipa_interface.h>
 #include <libcamera/request.h>
 
+#include "rkisp1_awb.h"
+
 namespace libcamera {
 
 LOG_DEFINE_CATEGORY(IPARkISP1)
@@ -52,6 +54,7 @@ private:
 
 	void setControls(unsigned int frame);
 	void metadataReady(unsigned int frame, unsigned int aeState);
+	void configureParams();
 
 	std::map<unsigned int, FrameBuffer> buffers_;
 	std::map<unsigned int, void *> buffersMemory_;
@@ -66,6 +69,14 @@ private:
 	uint32_t gain_;
 	uint32_t minGain_;
 	uint32_t maxGain_;
+
+	/* Interface to the AWB algorithm */
+	std::unique_ptr<RkISP1Awb> awbAlgo_;
+
+	/* Local parameter storage */
+	struct rkisp1_params_cfg params_;
+	bool aeLocked_;
+	bool awbLocked_;
 };
 
 int IPARkISP1::init(unsigned int hwRevision)
@@ -87,6 +98,189 @@ int IPARkISP1::start()
 	setControls(0);
 
 	return 0;
+}
+
+static void configureAwb(struct rkisp1_params_cfg &params)
+{
+	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_AWB;
+	params.module_en_update |= RKISP1_CIF_ISP_MODULE_AWB;
+	params.module_ens |= RKISP1_CIF_ISP_MODULE_AWB;
+
+	params.meas.awb_meas_config.awb_mode = RKISP1_CIF_ISP_AWB_MODE_RGB;
+	params.meas.awb_meas_config.awb_wnd.h_offs = 1640 / 4;
+	params.meas.awb_meas_config.awb_wnd.h_size = 1640 / 2;
+	params.meas.awb_meas_config.awb_wnd.v_offs = 1232 / 4;
+	params.meas.awb_meas_config.awb_wnd.v_size = 1232 / 2;
+
+	params.meas.awb_meas_config.max_y = 230;
+	params.meas.awb_meas_config.min_y = 250; // max_g
+	params.meas.awb_meas_config.max_csum = 250;
+	params.meas.awb_meas_config.min_c = 230;
+	params.meas.awb_meas_config.awb_ref_cb = 16; // max b
+	params.meas.awb_meas_config.awb_ref_cr = 16; // max r
+	params.meas.awb_meas_config.enable_ymax_cmp = 0;
+	params.meas.awb_meas_config.frames = 0;
+}
+
+static void configureAwbGains(struct rkisp1_params_cfg &params)
+{
+	params.module_en_update |= RKISP1_CIF_ISP_MODULE_AWB_GAIN;
+	params.module_ens |= 0;
+	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_AWB_GAIN;
+
+	params.others.awb_gain_config.gain_green_b = 256;
+	params.others.awb_gain_config.gain_blue = 256;
+	params.others.awb_gain_config.gain_red = 256;
+	params.others.awb_gain_config.gain_green_r = 256;
+}
+
+static void configureCtk(struct rkisp1_params_cfg &params)
+{
+	params.module_en_update |= RKISP1_CIF_ISP_MODULE_CTK;
+	params.module_ens |= 0;
+	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_CTK;
+}
+
+static void configureLsc(struct rkisp1_params_cfg &params)
+{
+	params.module_en_update |= RKISP1_CIF_ISP_MODULE_LSC;
+	params.module_ens |= 0;
+	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_LSC;
+}
+
+static void configureIe(struct rkisp1_params_cfg &params)
+{
+	params.module_en_update |= RKISP1_CIF_ISP_MODULE_IE;
+	params.module_ens |= 0;
+	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_IE;
+
+	params.others.ie_config.effect = 0;
+}
+
+static void configureBdm(struct rkisp1_params_cfg &params)
+{
+	params.module_en_update |= RKISP1_CIF_ISP_MODULE_BDM;
+	params.module_ens |= 0;
+	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_BDM;
+
+	params.others.bdm_config.demosaic_th = 4;
+}
+
+static void configureAec(struct rkisp1_params_cfg &params)
+{
+	params.module_en_update |= RKISP1_CIF_ISP_MODULE_AEC;
+	params.module_ens |= RKISP1_CIF_ISP_MODULE_AEC;
+	params.module_cfg_update = RKISP1_CIF_ISP_MODULE_AEC;
+
+	params.meas.aec_config.meas_window.h_offs = (1232 / 5) / 4;
+	params.meas.aec_config.meas_window.h_size = (1640 / 5) / 2;
+	params.meas.aec_config.meas_window.v_offs = (1232 / 5) / 4;
+	params.meas.aec_config.meas_window.v_size = (1232 / 5) / 2;
+	params.meas.aec_config.autostop = RKISP1_CIF_ISP_EXP_CTRL_AUTOSTOP_0;
+	params.meas.aec_config.mode = RKISP1_CIF_ISP_EXP_MEASURING_MODE_0;
+}
+
+static void configureHist(struct rkisp1_params_cfg &params)
+{
+	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_HST;
+	params.module_en_update |= RKISP1_CIF_ISP_MODULE_HST;
+	params.module_ens |= RKISP1_CIF_ISP_MODULE_HST;
+	params.meas.hst_config.mode = RKISP1_CIF_ISP_HISTOGRAM_MODE_R_HISTOGRAM;
+	params.meas.hst_config.meas_window.h_offs = (1640 / 4) / 5;
+	params.meas.hst_config.meas_window.h_size = (1640 / 2) / 5;
+	params.meas.hst_config.meas_window.v_offs = (1232 / 4) / 5;
+	params.meas.hst_config.meas_window.v_size = (1232 / 2) / 5;
+	for (int i = 0; i < RKISP1_CIF_ISP_HISTOGRAM_WEIGHT_GRIDS_SIZE; i++)
+		params.meas.hst_config.hist_weight[i] = 1;
+}
+
+static void configureBls(struct rkisp1_params_cfg &params)
+{
+	params.module_en_update |= RKISP1_CIF_ISP_MODULE_BLS;
+	params.module_ens |= RKISP1_CIF_ISP_MODULE_BLS;
+	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_BLS;
+
+	params.others.bls_config.enable_auto = 0;
+	params.others.bls_config.en_windows = 0;
+	params.others.bls_config.fixed_val.r = 160;
+	params.others.bls_config.fixed_val.gr = 160;
+	params.others.bls_config.fixed_val.gb = 160;
+	params.others.bls_config.fixed_val.b = 160;
+}
+
+static void configureCproc(struct rkisp1_params_cfg &params)
+{
+	params.module_en_update |= RKISP1_CIF_ISP_MODULE_CPROC;
+	params.module_ens |= RKISP1_CIF_ISP_MODULE_CPROC;
+	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_CPROC;
+
+	params.others.cproc_config.c_out_range = 1;
+	params.others.cproc_config.y_in_range = 1;
+	params.others.cproc_config.y_out_range = 0;
+	params.others.cproc_config.contrast = 200;
+	params.others.cproc_config.brightness = 0;
+	params.others.cproc_config.sat = 0x80;
+	params.others.cproc_config.hue = 0;
+}
+
+static void configureDpcc(struct rkisp1_params_cfg &params)
+{
+	params.module_en_update |= RKISP1_CIF_ISP_MODULE_DPCC;
+	params.module_ens |= 0;
+	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_DPCC;
+}
+
+static void configureFlt(struct rkisp1_params_cfg &params)
+{
+	params.module_en_update |= RKISP1_CIF_ISP_MODULE_FLT;
+	params.module_ens |= 0;
+	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_FLT;
+}
+
+static void configureDpf(struct rkisp1_params_cfg &params)
+{
+	params.module_en_update |= RKISP1_CIF_ISP_MODULE_DPF;
+	params.module_ens |= 0;
+	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_DPF;
+}
+
+static void configureDpfStrength(struct rkisp1_params_cfg &params)
+{
+	params.module_en_update |= RKISP1_CIF_ISP_MODULE_DPF_STRENGTH;
+	params.module_ens |= 0;
+	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_DPF_STRENGTH;
+}
+
+static void configureGoc(struct rkisp1_params_cfg &params)
+{
+	params.module_en_update |= RKISP1_CIF_ISP_MODULE_GOC;
+	params.module_ens |= 0;
+	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_GOC;
+}
+
+void IPARkISP1::configureParams()
+{
+	params_.module_en_update = 0;
+	params_.module_ens = 0;
+	params_.module_cfg_update = 0;
+
+	configureAwb(params_);
+	configureAwbGains(params_);
+	configureCtk(params_);
+	configureLsc(params_);
+
+	configureAec(params_);
+	configureHist(params_);
+	configureBls(params_);
+	configureDpcc(params_);
+	configureFlt(params_);
+	configureDpf(params_);
+	configureDpfStrength(params_);
+
+	configureCproc(params_);
+	configureGoc(params_);
+	configureIe(params_);
+	configureBdm(params_);
 }
 
 /**
@@ -129,6 +323,15 @@ int IPARkISP1::configure([[maybe_unused]] const IPACameraSensorInfo &info,
 	LOG(IPARkISP1, Info)
 		<< "Exposure: " << minExposure_ << "-" << maxExposure_
 		<< " Gain: " << minGain_ << "-" << maxGain_;
+
+	params_ = {};
+	configureParams();
+
+	aeLocked_ = false;
+	awbLocked_ = false;
+
+	awbAlgo_ = std::make_unique<RkISP1Awb>();
+	awbAlgo_->initialise(params_);
 
 	return 0;
 }
@@ -205,17 +408,23 @@ void IPARkISP1::processEvent(const RkISP1Event &event)
 void IPARkISP1::queueRequest(unsigned int frame, rkisp1_params_cfg *params,
 			     const ControlList &controls)
 {
-	/* Prepare parameters buffer. */
-	memset(params, 0, sizeof(*params));
+	configureParams();
 
 	/* Auto Exposure on/off. */
 	if (controls.contains(controls::AeEnable)) {
 		autoExposure_ = controls.get(controls::AeEnable);
 		if (autoExposure_)
-			params->module_ens = RKISP1_CIF_ISP_MODULE_AEC;
+			params_.module_ens |= RKISP1_CIF_ISP_MODULE_AEC;
 
-		params->module_en_update = RKISP1_CIF_ISP_MODULE_AEC;
+		params_.module_en_update |= RKISP1_CIF_ISP_MODULE_AEC;
 	}
+
+	if (awbLocked_ == false && aeLocked_ == true && (frame % 30 == 0)) {
+		awbAlgo_->updateWbParameters(params_);
+		awbLocked_ = true;
+	}
+
+	*params = params_;
 
 	RkISP1Action op;
 	op.op = ActionParamFilled;
@@ -228,7 +437,12 @@ void IPARkISP1::updateStatistics(unsigned int frame,
 {
 	const rkisp1_cif_isp_stat *params = &stats->params;
 	unsigned int aeState = 0;
-
+#if 0
+	const rkisp1_cif_isp_hist_stat *hist = &params->hist;
+	for (int i = 0 ; i < RKISP1_CIF_ISP_HIST_BIN_N_MAX ; i++) {
+		LOG(IPARkISP1, Error) << i << ": " << (__u32)hist->hist_bins[i];
+	}
+#endif
 	if (stats->meas_type & RKISP1_CIF_ISP_STAT_AUTOEXP) {
 		const rkisp1_cif_isp_ae_stat *ae = &params->ae;
 
@@ -257,12 +471,16 @@ void IPARkISP1::updateStatistics(unsigned int frame,
 
 			exposure = exposure / exposure_ * minGain_;
 			gain_ = std::clamp<uint64_t>((uint64_t)exposure,
-						     minGain_, maxGain_);
+						     minGain_ + 1, maxGain_);
 
 			setControls(frame + 1);
 		}
 
 		aeState = fabs(factor - 1.0f) < 0.05f ? 2 : 1;
+	}
+
+	if (aeState) {
+		awbAlgo_->calculateWBGains(stats);
 	}
 
 	metadataReady(frame, aeState);
@@ -285,8 +503,10 @@ void IPARkISP1::metadataReady(unsigned int frame, unsigned int aeState)
 {
 	ControlList ctrls(controls::controls);
 
-	if (aeState)
+	if (aeState) {
+		aeLocked_ = true;
 		ctrls.set(controls::AeLocked, aeState == 2);
+	}
 
 	RkISP1Action op;
 	op.op = ActionMetadata;
