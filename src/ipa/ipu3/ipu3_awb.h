@@ -47,8 +47,6 @@ private:
 	void generateZones(std::vector<RGB> &zones);
 	void generateAwbStats(const ipu3_uapi_stats_3a *stats);
 	void clearAwbStats();
-	void awbGreyWorld();
-	uint32_t estimateCCT(double red, double green, double blue);
 
 	struct ipu3_uapi_grid_config awbGrid_;
 
