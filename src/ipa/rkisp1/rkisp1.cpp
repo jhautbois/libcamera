@@ -54,7 +54,7 @@ private:
 
 	void setControls(unsigned int frame);
 	void metadataReady(unsigned int frame, unsigned int aeState);
-	void configureParams();
+	void configureParams(const ControlList &controls);
 
 	std::map<unsigned int, FrameBuffer> buffers_;
 	std::map<unsigned int, void *> buffersMemory_;
@@ -62,7 +62,6 @@ private:
 	ControlInfoMap ctrls_;
 
 	/* Camera sensor controls. */
-	bool autoExposure_;
 	uint32_t exposure_;
 	uint32_t minExposure_;
 	uint32_t maxExposure_;
@@ -76,7 +75,6 @@ private:
 	/* Local parameter storage */
 	struct rkisp1_params_cfg params_;
 	bool aeLocked_;
-	bool awbLocked_;
 };
 
 int IPARkISP1::init(unsigned int hwRevision)
@@ -112,12 +110,12 @@ static void configureAwb(struct rkisp1_params_cfg &params)
 	params.meas.awb_meas_config.awb_wnd.v_offs = 1232 / 4;
 	params.meas.awb_meas_config.awb_wnd.v_size = 1232 / 2;
 
-	params.meas.awb_meas_config.max_y = 230;
+	params.meas.awb_meas_config.max_y = 0;
 	params.meas.awb_meas_config.min_y = 250; // max_g
-	params.meas.awb_meas_config.max_csum = 250;
-	params.meas.awb_meas_config.min_c = 230;
-	params.meas.awb_meas_config.awb_ref_cb = 16; // max b
-	params.meas.awb_meas_config.awb_ref_cr = 16; // max r
+	params.meas.awb_meas_config.max_csum = 0;
+	params.meas.awb_meas_config.min_c = 0;
+	params.meas.awb_meas_config.awb_ref_cb = 250; // max b
+	params.meas.awb_meas_config.awb_ref_cr = 250; // max r
 	params.meas.awb_meas_config.enable_ymax_cmp = 0;
 	params.meas.awb_meas_config.frames = 0;
 }
@@ -166,13 +164,20 @@ static void configureBdm(struct rkisp1_params_cfg &params)
 	params.others.bdm_config.demosaic_th = 4;
 }
 
-static void configureAec(struct rkisp1_params_cfg &params)
+static void configureAec(struct rkisp1_params_cfg &params, const ControlList &controls)
 {
-	params.module_en_update |= RKISP1_CIF_ISP_MODULE_AEC;
-	params.module_ens |= RKISP1_CIF_ISP_MODULE_AEC;
-	params.module_cfg_update = RKISP1_CIF_ISP_MODULE_AEC;
+	/* Auto Exposure on/off. */
+	if (controls.contains(controls::AeEnable)) {
+		bool autoExposure = controls.get(controls::AeEnable);
+		if (autoExposure)
+			params.module_ens |= RKISP1_CIF_ISP_MODULE_AEC;
 
-	params.meas.aec_config.meas_window.h_offs = (1232 / 5) / 4;
+		params.module_en_update |= RKISP1_CIF_ISP_MODULE_AEC;
+	}
+
+	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_AEC;
+
+	params.meas.aec_config.meas_window.h_offs = (1640 / 5) / 4;
 	params.meas.aec_config.meas_window.h_size = (1640 / 5) / 2;
 	params.meas.aec_config.meas_window.v_offs = (1232 / 5) / 4;
 	params.meas.aec_config.meas_window.v_size = (1232 / 5) / 2;
@@ -183,13 +188,13 @@ static void configureAec(struct rkisp1_params_cfg &params)
 static void configureHist(struct rkisp1_params_cfg &params)
 {
 	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_HST;
-	params.module_en_update |= RKISP1_CIF_ISP_MODULE_HST;
+	params.module_en_update |= 0;
 	params.module_ens |= RKISP1_CIF_ISP_MODULE_HST;
-	params.meas.hst_config.mode = RKISP1_CIF_ISP_HISTOGRAM_MODE_R_HISTOGRAM;
-	params.meas.hst_config.meas_window.h_offs = (1640 / 4) / 5;
-	params.meas.hst_config.meas_window.h_size = (1640 / 2) / 5;
-	params.meas.hst_config.meas_window.v_offs = (1232 / 4) / 5;
-	params.meas.hst_config.meas_window.v_size = (1232 / 2) / 5;
+	params.meas.hst_config.mode = RKISP1_CIF_ISP_HISTOGRAM_MODE_DISABLE;
+	params.meas.hst_config.meas_window.h_offs = (1640 / 5) / 4;
+	params.meas.hst_config.meas_window.h_size = (1640 / 5) / 2;
+	params.meas.hst_config.meas_window.v_offs = (1232 / 5) / 4;
+	params.meas.hst_config.meas_window.v_size = (1232 / 5) / 2;
 	for (int i = 0; i < RKISP1_CIF_ISP_HISTOGRAM_WEIGHT_GRIDS_SIZE; i++)
 		params.meas.hst_config.hist_weight[i] = 1;
 }
@@ -197,27 +202,27 @@ static void configureHist(struct rkisp1_params_cfg &params)
 static void configureBls(struct rkisp1_params_cfg &params)
 {
 	params.module_en_update |= RKISP1_CIF_ISP_MODULE_BLS;
-	params.module_ens |= RKISP1_CIF_ISP_MODULE_BLS;
+	params.module_ens |= 0;
 	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_BLS;
 
 	params.others.bls_config.enable_auto = 0;
 	params.others.bls_config.en_windows = 0;
-	params.others.bls_config.fixed_val.r = 160;
-	params.others.bls_config.fixed_val.gr = 160;
-	params.others.bls_config.fixed_val.gb = 160;
-	params.others.bls_config.fixed_val.b = 160;
+	params.others.bls_config.fixed_val.r = 256;
+	params.others.bls_config.fixed_val.gr = 256;
+	params.others.bls_config.fixed_val.gb = 256;
+	params.others.bls_config.fixed_val.b = 256;
 }
 
 static void configureCproc(struct rkisp1_params_cfg &params)
 {
 	params.module_en_update |= RKISP1_CIF_ISP_MODULE_CPROC;
-	params.module_ens |= RKISP1_CIF_ISP_MODULE_CPROC;
+	params.module_ens |= 0;
 	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_CPROC;
 
 	params.others.cproc_config.c_out_range = 1;
 	params.others.cproc_config.y_in_range = 1;
 	params.others.cproc_config.y_out_range = 0;
-	params.others.cproc_config.contrast = 200;
+	params.others.cproc_config.contrast = 0x80;
 	params.others.cproc_config.brightness = 0;
 	params.others.cproc_config.sat = 0x80;
 	params.others.cproc_config.hue = 0;
@@ -258,7 +263,7 @@ static void configureGoc(struct rkisp1_params_cfg &params)
 	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_GOC;
 }
 
-void IPARkISP1::configureParams()
+void IPARkISP1::configureParams(const ControlList &controls)
 {
 	params_.module_en_update = 0;
 	params_.module_ens = 0;
@@ -269,7 +274,7 @@ void IPARkISP1::configureParams()
 	configureCtk(params_);
 	configureLsc(params_);
 
-	configureAec(params_);
+	configureAec(params_, controls);
 	configureHist(params_);
 	configureBls(params_);
 	configureDpcc(params_);
@@ -310,8 +315,6 @@ int IPARkISP1::configure([[maybe_unused]] const IPACameraSensorInfo &info,
 		return -EINVAL;
 	}
 
-	autoExposure_ = true;
-
 	minExposure_ = std::max<uint32_t>(itExp->second.min().get<int32_t>(), 1);
 	maxExposure_ = itExp->second.max().get<int32_t>();
 	exposure_ = minExposure_;
@@ -325,10 +328,8 @@ int IPARkISP1::configure([[maybe_unused]] const IPACameraSensorInfo &info,
 		<< " Gain: " << minGain_ << "-" << maxGain_;
 
 	params_ = {};
-	configureParams();
 
 	aeLocked_ = false;
-	awbLocked_ = false;
 
 	awbAlgo_ = std::make_unique<RkISP1Awb>();
 	awbAlgo_->initialise(params_);
@@ -408,22 +409,11 @@ void IPARkISP1::processEvent(const RkISP1Event &event)
 void IPARkISP1::queueRequest(unsigned int frame, rkisp1_params_cfg *params,
 			     const ControlList &controls)
 {
-	configureParams();
-
-	/* Auto Exposure on/off. */
-	if (controls.contains(controls::AeEnable)) {
-		autoExposure_ = controls.get(controls::AeEnable);
-		if (autoExposure_)
-			params_.module_ens |= RKISP1_CIF_ISP_MODULE_AEC;
-
-		params_.module_en_update |= RKISP1_CIF_ISP_MODULE_AEC;
-	}
-
-	if (awbLocked_ == false && aeLocked_ == true && (frame % 30 == 0)) {
+	configureParams(controls);
+/*
+	if (frame % 3 == 0)
 		awbAlgo_->updateWbParameters(params_);
-		awbLocked_ = true;
-	}
-
+*/
 	*params = params_;
 
 	RkISP1Action op;
@@ -437,16 +427,11 @@ void IPARkISP1::updateStatistics(unsigned int frame,
 {
 	const rkisp1_cif_isp_stat *params = &stats->params;
 	unsigned int aeState = 0;
-#if 0
-	const rkisp1_cif_isp_hist_stat *hist = &params->hist;
-	for (int i = 0 ; i < RKISP1_CIF_ISP_HIST_BIN_N_MAX ; i++) {
-		LOG(IPARkISP1, Error) << i << ": " << (__u32)hist->hist_bins[i];
-	}
-#endif
+
 	if (stats->meas_type & RKISP1_CIF_ISP_STAT_AUTOEXP) {
 		const rkisp1_cif_isp_ae_stat *ae = &params->ae;
 
-		const unsigned int target = 60;
+		const unsigned int target = 128;
 
 		unsigned int value = 0;
 		unsigned int num = 0;
@@ -459,29 +444,28 @@ void IPARkISP1::updateStatistics(unsigned int frame,
 		}
 		value /= num;
 
+		LOG(IPARkISP1, Error) << "Exp measured: " << value;
 		double factor = (double)target / value;
 
 		if (frame % 3 == 0) {
 			double exposure;
 
 			exposure = factor * exposure_ * gain_ / minGain_;
+			gain_ = std::clamp<uint64_t>((uint64_t)exposure,
+						     minGain_ + 1, maxGain_);
+			
+			exposure = exposure / gain_ * minGain_;			     
 			exposure_ = std::clamp<uint64_t>((uint64_t)exposure,
 							 minExposure_,
 							 maxExposure_);
 
-			exposure = exposure / exposure_ * minGain_;
-			gain_ = std::clamp<uint64_t>((uint64_t)exposure,
-						     minGain_ + 1, maxGain_);
-
 			setControls(frame + 1);
 		}
 
-		aeState = fabs(factor - 1.0f) < 0.05f ? 2 : 1;
+		aeState = fabs(factor - 1.0f) < 0.1f ? 2 : 1;
 	}
 
-	if (aeState) {
-		awbAlgo_->calculateWBGains(stats);
-	}
+	awbAlgo_->calculateWBGains(stats);
 
 	metadataReady(frame, aeState);
 }
