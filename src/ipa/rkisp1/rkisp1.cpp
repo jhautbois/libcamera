@@ -75,6 +75,9 @@ private:
 	/* Local parameter storage */
 	struct rkisp1_params_cfg params_;
 	bool aeLocked_;
+	bool awbLocked_;
+	uint16_t redGain_;
+	uint16_t blueGain_;
 };
 
 int IPARkISP1::init(unsigned int hwRevision)
@@ -105,10 +108,10 @@ static void configureAwb(struct rkisp1_params_cfg &params)
 	params.module_ens |= RKISP1_CIF_ISP_MODULE_AWB;
 
 	params.meas.awb_meas_config.awb_mode = RKISP1_CIF_ISP_AWB_MODE_RGB;
-	params.meas.awb_meas_config.awb_wnd.h_offs = 1640 / 4;
-	params.meas.awb_meas_config.awb_wnd.h_size = 1640 / 2;
-	params.meas.awb_meas_config.awb_wnd.v_offs = 1232 / 4;
-	params.meas.awb_meas_config.awb_wnd.v_size = 1232 / 2;
+	params.meas.awb_meas_config.awb_wnd.h_offs = 3280 / 2 - 3280/4;
+	params.meas.awb_meas_config.awb_wnd.h_size = 3280 / 2;
+	params.meas.awb_meas_config.awb_wnd.v_offs = 2464 / 2 - 2464 / 4;
+	params.meas.awb_meas_config.awb_wnd.v_size = 2464 / 2;
 
 	params.meas.awb_meas_config.max_y = 0;
 	params.meas.awb_meas_config.min_y = 250; // max_g
@@ -123,12 +126,10 @@ static void configureAwb(struct rkisp1_params_cfg &params)
 static void configureAwbGains(struct rkisp1_params_cfg &params)
 {
 	params.module_en_update |= RKISP1_CIF_ISP_MODULE_AWB_GAIN;
-	params.module_ens |= 0;
+	params.module_ens |= RKISP1_CIF_ISP_MODULE_AWB_GAIN;
 	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_AWB_GAIN;
 
 	params.others.awb_gain_config.gain_green_b = 256;
-	params.others.awb_gain_config.gain_blue = 256;
-	params.others.awb_gain_config.gain_red = 256;
 	params.others.awb_gain_config.gain_green_r = 256;
 }
 
@@ -177,12 +178,12 @@ static void configureAec(struct rkisp1_params_cfg &params, const ControlList &co
 
 	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_AEC;
 
-	params.meas.aec_config.meas_window.h_offs = (1640 / 5) / 4;
-	params.meas.aec_config.meas_window.h_size = (1640 / 5) / 2;
-	params.meas.aec_config.meas_window.v_offs = (1232 / 5) / 4;
-	params.meas.aec_config.meas_window.v_size = (1232 / 5) / 2;
+	params.meas.aec_config.meas_window.h_offs = (3280 / 5) / 4;
+	params.meas.aec_config.meas_window.h_size = (3280 / 5) / 2;
+	params.meas.aec_config.meas_window.v_offs = (2464 / 5) / 4;
+	params.meas.aec_config.meas_window.v_size = (2464 / 5) / 2;
 	params.meas.aec_config.autostop = RKISP1_CIF_ISP_EXP_CTRL_AUTOSTOP_0;
-	params.meas.aec_config.mode = RKISP1_CIF_ISP_EXP_MEASURING_MODE_0;
+	params.meas.aec_config.mode = RKISP1_CIF_ISP_EXP_MEASURING_MODE_1;
 }
 
 static void configureHist(struct rkisp1_params_cfg &params)
@@ -191,10 +192,10 @@ static void configureHist(struct rkisp1_params_cfg &params)
 	params.module_en_update |= 0;
 	params.module_ens |= RKISP1_CIF_ISP_MODULE_HST;
 	params.meas.hst_config.mode = RKISP1_CIF_ISP_HISTOGRAM_MODE_DISABLE;
-	params.meas.hst_config.meas_window.h_offs = (1640 / 5) / 4;
-	params.meas.hst_config.meas_window.h_size = (1640 / 5) / 2;
-	params.meas.hst_config.meas_window.v_offs = (1232 / 5) / 4;
-	params.meas.hst_config.meas_window.v_size = (1232 / 5) / 2;
+	params.meas.hst_config.meas_window.h_offs = (3280 / 5) / 4;
+	params.meas.hst_config.meas_window.h_size = (3280 / 5) / 2;
+	params.meas.hst_config.meas_window.v_offs = (2464 / 5) / 4;
+	params.meas.hst_config.meas_window.v_size = (2464 / 5) / 2;
 	for (int i = 0; i < RKISP1_CIF_ISP_HISTOGRAM_WEIGHT_GRIDS_SIZE; i++)
 		params.meas.hst_config.hist_weight[i] = 1;
 }
@@ -202,7 +203,7 @@ static void configureHist(struct rkisp1_params_cfg &params)
 static void configureBls(struct rkisp1_params_cfg &params)
 {
 	params.module_en_update |= RKISP1_CIF_ISP_MODULE_BLS;
-	params.module_ens |= 0;
+	params.module_ens |= RKISP1_CIF_ISP_MODULE_BLS;
 	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_BLS;
 
 	params.others.bls_config.enable_auto = 0;
@@ -216,13 +217,13 @@ static void configureBls(struct rkisp1_params_cfg &params)
 static void configureCproc(struct rkisp1_params_cfg &params)
 {
 	params.module_en_update |= RKISP1_CIF_ISP_MODULE_CPROC;
-	params.module_ens |= 0;
+	params.module_ens |= RKISP1_CIF_ISP_MODULE_CPROC;
 	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_CPROC;
 
 	params.others.cproc_config.c_out_range = 1;
 	params.others.cproc_config.y_in_range = 1;
 	params.others.cproc_config.y_out_range = 0;
-	params.others.cproc_config.contrast = 0x80;
+	params.others.cproc_config.contrast = 0x80 * 1.2; // 1.2
 	params.others.cproc_config.brightness = 0;
 	params.others.cproc_config.sat = 0x80;
 	params.others.cproc_config.hue = 0;
@@ -245,7 +246,7 @@ static void configureFlt(struct rkisp1_params_cfg &params)
 static void configureDpf(struct rkisp1_params_cfg &params)
 {
 	params.module_en_update |= RKISP1_CIF_ISP_MODULE_DPF;
-	params.module_ens |= 0;
+	params.module_ens |= RKISP1_CIF_ISP_MODULE_DPF;
 	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_DPF;
 }
 
@@ -271,6 +272,9 @@ void IPARkISP1::configureParams(const ControlList &controls)
 
 	configureAwb(params_);
 	configureAwbGains(params_);
+	params_.others.awb_gain_config.gain_blue = blueGain_;
+	params_.others.awb_gain_config.gain_red = redGain_;
+
 	configureCtk(params_);
 	configureLsc(params_);
 
@@ -326,13 +330,19 @@ int IPARkISP1::configure([[maybe_unused]] const IPACameraSensorInfo &info,
 	LOG(IPARkISP1, Info)
 		<< "Exposure: " << minExposure_ << "-" << maxExposure_
 		<< " Gain: " << minGain_ << "-" << maxGain_;
+	LOG(IPARkISP1, Error) << "Camera output size: " << info.outputSize.toString()
+				<< " Active area: " << info.activeAreaSize.toString();
 
 	params_ = {};
 
 	aeLocked_ = false;
+	awbLocked_ = false;
 
 	awbAlgo_ = std::make_unique<RkISP1Awb>();
 	awbAlgo_->initialise(params_);
+
+	redGain_ = 256;
+	blueGain_ = 256;
 
 	return 0;
 }
@@ -410,10 +420,14 @@ void IPARkISP1::queueRequest(unsigned int frame, rkisp1_params_cfg *params,
 			     const ControlList &controls)
 {
 	configureParams(controls);
-/*
-	if (frame % 3 == 0)
+
+	if (aeLocked_ && !awbLocked_) {
 		awbAlgo_->updateWbParameters(params_);
-*/
+		redGain_ = params_.others.awb_gain_config.gain_red;
+		blueGain_ = params_.others.awb_gain_config.gain_blue;
+		awbLocked_ = true;
+	}
+
 	*params = params_;
 
 	RkISP1Action op;
@@ -431,7 +445,7 @@ void IPARkISP1::updateStatistics(unsigned int frame,
 	if (stats->meas_type & RKISP1_CIF_ISP_STAT_AUTOEXP) {
 		const rkisp1_cif_isp_ae_stat *ae = &params->ae;
 
-		const unsigned int target = 128;
+		const unsigned int target = 100;
 
 		unsigned int value = 0;
 		unsigned int num = 0;
@@ -444,7 +458,7 @@ void IPARkISP1::updateStatistics(unsigned int frame,
 		}
 		value /= num;
 
-		LOG(IPARkISP1, Error) << "Exp measured: " << value;
+		LOG(IPARkISP1, Debug) << "Exp measured: " << value;
 		double factor = (double)target / value;
 
 		if (frame % 3 == 0) {
@@ -490,6 +504,8 @@ void IPARkISP1::metadataReady(unsigned int frame, unsigned int aeState)
 	if (aeState) {
 		aeLocked_ = true;
 		ctrls.set(controls::AeLocked, aeState == 2);
+	} else {
+		aeLocked_ = false;
 	}
 
 	RkISP1Action op;

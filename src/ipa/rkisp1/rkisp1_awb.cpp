@@ -110,7 +110,7 @@ void RkISP1Awb::initialise([[maybe_unused]] rkisp1_params_cfg &params)
 /* Generate an RGB vector with the average values for each region */
 void RkISP1Awb::generateZones(std::vector<RGB> &zones)
 {
-	LOG(RkISP1Awb, Error) << "counted: " << awbStats_[0].counted << " green zones: " << awbStats_[0].gSum / awbStats_[0].counted;
+	LOG(RkISP1Awb, Debug) << "counted: " << awbStats_[0].counted << " green zones: " << awbStats_[0].gSum / awbStats_[0].counted;
 	for (unsigned int i = 0; i < kAwbStatsSizeX * kAwbStatsSizeY; i++) {
 		RGB zone;
 		double counted = awbStats_[i].counted;
@@ -129,7 +129,11 @@ void RkISP1Awb::generateZones(std::vector<RGB> &zones)
 void RkISP1Awb::generateAwbStats(const rkisp1_stat_buffer *stats)
 {
 	const rkisp1_cif_isp_stat *statParams = &stats->params;
-	LOG(RkISP1Awb, Error) << "Measured AWB : "
+
+	if (statParams->awb.awb_mean[0].cnt == 0)
+		return;
+
+	LOG(RkISP1Awb, Debug) << "Measured AWB : "
 			      << " count: " << (double)statParams->awb.awb_mean[0].cnt
 			      << " mean G " << (double)statParams->awb.awb_mean[0].mean_y_or_g
 			      << " mean B " << (double)statParams->awb.awb_mean[0].mean_cb_or_b
@@ -161,32 +165,31 @@ void RkISP1Awb::calculateWBGains(const rkisp1_stat_buffer *stats)
 	LOG(RkISP1Awb, Debug) << "Valid zones: " << zones_.size();
 	if (zones_.size() != 0) {
 		awbGreyWorld(zones_, asyncResults_);
-		LOG(RkISP1Awb, Error) << "Gain found for red: " << asyncResults_.redGain
+		LOG(RkISP1Awb, Debug) << "Gain found for red: " << asyncResults_.redGain
 				      << " and for blue: " << asyncResults_.blueGain;
 	}
 }
 
 void RkISP1Awb::updateWbParameters(rkisp1_params_cfg &params)
-{	
-	/*
-	params.module_en_update |= RKISP1_CIF_ISP_MODULE_AWB | RKISP1_CIF_ISP_MODULE_AWB_GAIN;
-	params.module_ens |= RKISP1_CIF_ISP_MODULE_AWB | RKISP1_CIF_ISP_MODULE_AWB_GAIN;
+{
+	params.module_en_update |= RKISP1_CIF_ISP_MODULE_AWB_GAIN;
+	params.module_ens |= RKISP1_CIF_ISP_MODULE_AWB_GAIN;
 	params.meas.awb_meas_config.awb_mode = RKISP1_CIF_ISP_AWB_MODE_RGB;
-	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_AWB_GAIN | RKISP1_CIF_ISP_MODULE_AWB;*/
+	params.module_cfg_update |= RKISP1_CIF_ISP_MODULE_AWB_GAIN;
 	/*
 	 * rkisp1_cif_isp_awb_gain_config
 	 * All fields in this struct are 10 bit, where: 0x100h = 1
 	 * unsigned integer value, range 0 to 4 with 8 bit fractional part.
 	 * out_data_x = ( AWB_GAIN_X * in_data + 128) >> 8
 	 */
-
-	LOG(RkISP1Awb, Error) << "Applying Gain found for red: " << asyncResults_.redGain
-				      << " and for blue: " << asyncResults_.blueGain;
+	
 	params.others.awb_gain_config.gain_green_b = 256;
 	params.others.awb_gain_config.gain_blue = std::clamp(256.0 * asyncResults_.blueGain, 128.0, 512.0);
 	params.others.awb_gain_config.gain_red = std::clamp(256.0 * asyncResults_.redGain, 128.0, 512.0);
 	params.others.awb_gain_config.gain_green_r = 256;
 
+	LOG(RkISP1Awb, Error) << "Applying Gain found for red: " << params.others.awb_gain_config.gain_red
+				      << " and for blue: " << params.others.awb_gain_config.gain_blue;
 	LOG(RkISP1Awb, Error) << "Color temperature estimated: " << asyncResults_.temperatureK;
 }
 
