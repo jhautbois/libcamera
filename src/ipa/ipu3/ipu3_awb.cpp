@@ -18,9 +18,7 @@ namespace ipa::ipu3 {
 
 LOG_DEFINE_CATEGORY(IPU3Awb)
 
-/* \todo those values should be better calculated */
-static constexpr uint32_t kMinZonesCounted = 16;
-static constexpr uint32_t kMinGreenLevelInZone = 32;
+static constexpr uint32_t kMinGreenLevelInZone = 16;
 
 /**
  * \struct IspStatsRegion
@@ -142,6 +140,7 @@ IPU3Awb::IPU3Awb()
 	asyncResults_.greenGain = 1.0;
 	asyncResults_.redGain = 1.0;
 	asyncResults_.temperatureK = 4500;
+	minZonesCounted_ = 0;
 }
 
 IPU3Awb::~IPU3Awb()
@@ -216,9 +215,10 @@ void IPU3Awb::generateZones(std::vector<RGB> &zones)
 	for (unsigned int i = 0; i < kAwbStatsSizeX * kAwbStatsSizeY; i++) {
 		RGB zone;
 		double counted = awbStats_[i].counted;
-		LOG(IPU3Awb, Debug) << counted << " counted values with "
+		LOG(IPU3Awb, Debug) << counted << " counted values with a minimum of "
+				    << minZonesCounted_ << " "
 				    << awbStats_[i].gSum / counted << " green zones";
-		if (counted >= kMinZonesCounted) {
+		if (counted >= minZonesCounted_) {
 			zone.G = awbStats_[i].gSum / counted;
 			if (zone.G >= kMinGreenLevelInZone) {
 				zone.R = awbStats_[i].rSum / counted;
@@ -235,6 +235,7 @@ void IPU3Awb::generateAwbStats(const ipu3_uapi_stats_3a *stats)
 	uint32_t regionWidth = round(awbGrid_.width / static_cast<double>(kAwbStatsSizeX));
 	uint32_t regionHeight = round(awbGrid_.height / static_cast<double>(kAwbStatsSizeY));
 
+	minZonesCounted_ = ((regionWidth * regionHeight) * 4) / 5;
 	/*
 	 * Generate a (kAwbStatsSizeX x kAwbStatsSizeY) array from the IPU3 grid which is
 	 * (awbGrid_.width x awbGrid_.height).
@@ -335,10 +336,10 @@ void IPU3Awb::updateWbParameters(ipu3_uapi_params &params, double agcGamma)
 	 * Default is 16, so do not change it at all.
 	 * 4096 is the value for a gain of 1.0
 	 */
-	params.acc_param.bnr.wb_gains.gr = 16;
-	params.acc_param.bnr.wb_gains.r = 4096 * asyncResults_.redGain;
-	params.acc_param.bnr.wb_gains.b = 4096 * asyncResults_.blueGain;
-	params.acc_param.bnr.wb_gains.gb = 16;
+	params.acc_param.bnr.wb_gains.gr = 4096;
+	params.acc_param.bnr.wb_gains.r = 8192 * asyncResults_.redGain;
+	params.acc_param.bnr.wb_gains.b = 8192 * asyncResults_.blueGain;
+	params.acc_param.bnr.wb_gains.gb = 4096;
 
 	LOG(IPU3Awb, Debug) << "Color temperature estimated: " << asyncResults_.temperatureK
 			    << " and gamma calculated: " << agcGamma;
