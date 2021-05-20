@@ -18,6 +18,7 @@ namespace ipa::ipu3 {
 
 LOG_DEFINE_CATEGORY(IPU3Awb)
 
+/* \todo those values should be better calculated */
 static constexpr uint32_t kMinZonesCounted = 16;
 static constexpr uint32_t kMinGreenLevelInZone = 32;
 
@@ -215,6 +216,8 @@ void IPU3Awb::generateZones(std::vector<RGB> &zones)
 	for (unsigned int i = 0; i < kAwbStatsSizeX * kAwbStatsSizeY; i++) {
 		RGB zone;
 		double counted = awbStats_[i].counted;
+		LOG(IPU3Awb, Debug) << counted << " counted values with "
+				    << awbStats_[i].gSum / counted << " green zones";
 		if (counted >= kMinZonesCounted) {
 			zone.G = awbStats_[i].gSum / counted;
 			if (zone.G >= kMinGreenLevelInZone) {
