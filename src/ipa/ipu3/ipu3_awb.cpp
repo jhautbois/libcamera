@@ -197,6 +197,13 @@ void IPU3Awb::initialise(ipu3_uapi_params &params, const Size &bdsOutputSize, st
 	params.use.acc_dm = 1;
 	params.acc_param.dm = imguCssDmDefaults;
 
+	params.use.obgrid = 1;
+	params.use.obgrid_param = 1;
+	params.obgrid_param.b = 60;
+	params.obgrid_param.r = 60;
+	params.obgrid_param.gb = 64;
+	params.obgrid_param.gr = 65;
+
 	zones_.reserve(kAwbStatsSizeX * kAwbStatsSizeY);
 }
 
