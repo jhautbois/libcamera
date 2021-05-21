@@ -48,6 +48,9 @@ private:
 	double lineDuration_;
 	uint32_t maxExposureTime_;
 
+	uint32_t minGain_;
+	uint32_t maxGain_;
+
 	uint64_t frameCount_;
 	uint64_t lastFrame_;
 

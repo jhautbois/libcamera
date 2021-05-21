@@ -29,15 +29,6 @@ static constexpr uint32_t kInitialFrameMinAECount = 4;
 /* Number of frames to wait between new gain/exposure estimations */
 static constexpr uint32_t kFrameSkipCount = 6;
 
-/* Maximum ISO value for analogue gain */
-static constexpr uint32_t kMinISO = 100;
-static constexpr uint32_t kMaxISO = 1500;
-
-/* Maximum analogue gain value
- * \todo grab it from a camera helper */
-static constexpr uint32_t kMinGain = kMinISO / 100;
-static constexpr uint32_t kMaxGain = kMaxISO / 100;
-
 /* Histogram constants */
 static constexpr uint32_t knumHistogramBins = 256;
 static constexpr double kEvGainTarget = 0.5;
@@ -67,6 +58,14 @@ void IPU3Agc::initialise(struct ipu3_uapi_grid_config &bdsGrid, const IPAConfigI
 	maxExposure_ = itExp->second.max().get<int32_t>();
 	lineDuration_ = configInfo.sensorInfo.lineLength / (configInfo.sensorInfo.pixelRate / 1e6);
 	maxExposureTime_ = maxExposure_ * lineDuration_;
+
+	const auto itGain = ctrls_.find(V4L2_CID_ANALOGUE_GAIN);
+	if (itGain == ctrls_.end()) {
+		LOG(IPU3Agc, Error) << "Can't find gain control";
+		return;
+	}
+	minGain_ = std::max(itGain->second.min().get<int32_t>(), 1);
+	maxGain_ = itGain->second.max().get<int32_t>();
 }
 
 void IPU3Agc::processBrightness(const ipu3_uapi_stats_3a *stats)
@@ -171,7 +170,7 @@ void IPU3Agc::lockExposureGain(uint32_t &exposure, uint32_t &gain)
 				    << " Shutter speed " << currentShutter
 				    << " Gain " << gain;
 		currentExposure_ = currentExposureNoDg_ * newGain;
-		double maxTotalExposure = maxExposureTime_ * kMaxGain;
+		double maxTotalExposure = maxExposureTime_ * maxGain_;
 		currentExposure_ = std::min(currentExposure_, maxTotalExposure);
 		LOG(IPU3Agc, Debug) << "Target total exposure " << currentExposure_;
 
@@ -182,10 +181,10 @@ void IPU3Agc::lockExposureGain(uint32_t &exposure, uint32_t &gain)
 		if (currentShutter < maxExposureTime_) {
 			exposure = std::clamp(static_cast<uint32_t>(exposure * currentExposure_ / currentExposureNoDg_), minExposure_, maxExposure_);
 			newExposure = currentExposure_ / exposure;
-			gain = std::clamp(static_cast<uint32_t>(gain * currentExposure_ / newExposure), kMinGain, kMaxGain);
+			gain = std::clamp(static_cast<uint32_t>(gain * currentExposure_ / newExposure), minGain_, maxGain_);
 			updateControls_ = true;
 		} else if (currentShutter >= maxExposureTime_) {
-			gain = std::clamp(static_cast<uint32_t>(gain * currentExposure_ / currentExposureNoDg_), kMinGain, kMaxGain);
+			gain = std::clamp(static_cast<uint32_t>(gain * currentExposure_ / currentExposureNoDg_), minGain_, maxGain_);
 			newExposure = currentExposure_ / gain;
 			exposure = std::clamp(static_cast<uint32_t>(exposure * currentExposure_ / newExposure), minExposure_, maxExposure_);
 			updateControls_ = true;
