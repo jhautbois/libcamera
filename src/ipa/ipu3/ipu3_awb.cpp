@@ -91,7 +91,7 @@ static constexpr uint32_t kMinGreenLevelInZone = 16;
 
 /* Default settings for Bayer noise reduction replicated from the Kernel */
 static const struct ipu3_uapi_bnr_static_config imguCssBnrDefaults = {
-	.wb_gains = { 16, 16, 16, 16 },
+	.wb_gains = { 8192, 8192, 8192, 8192 },
 	.wb_gains_thr = { 255, 255, 255, 255 },
 	.thr_coeffs = { 1700, 0, 31, 31, 0, 16 },
 	.thr_ctrl_shd = { 26, 26, 26, 26 },
@@ -364,10 +364,10 @@ void IPU3Awb::updateWbParameters(ipu3_uapi_params &params, double agcGamma)
 	 * Default is 16, so do not change it at all.
 	 * 4096 is the value for a gain of 1.0
 	 */
-	params.acc_param.bnr.wb_gains.gr = 4096;
+	params.acc_param.bnr.wb_gains.gr = 8192;
 	params.acc_param.bnr.wb_gains.r = 8192 * asyncResults_.redGain;
 	params.acc_param.bnr.wb_gains.b = 8192 * asyncResults_.blueGain;
-	params.acc_param.bnr.wb_gains.gb = 4096;
+	params.acc_param.bnr.wb_gains.gb = 8192;
 
 	LOG(IPU3Awb, Debug) << "Color temperature estimated: " << asyncResults_.temperatureK
 			    << " and gamma calculated: " << agcGamma;
