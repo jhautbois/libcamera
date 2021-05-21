@@ -133,6 +133,24 @@ static const struct ipu3_uapi_ccm_mat_config imguCssCcmDefault = {
 	0, 0, 8191, 0
 };
 
+const struct ipu3_uapi_dm_config imguCssDmDefaults = {
+	.dm_en = 1,
+	.ch_ar_en = 1,
+	.fcc_en = 1,
+	.reserved0 = 0,
+	.frame_width = 1280,
+	.gamma_sc = 16,
+	.reserved1 = 0,
+	.lc_ctrl = 15,
+	.reserved2 = 0,
+	.cr_param1 = 16,
+	.reserved3 = 0,
+	.cr_param2 = 16,
+	.reserved4 = 0,
+	.coring_param = 16,
+	.reserved5 = 0,
+};
+
 IPU3Awb::IPU3Awb()
 	: Algorithm()
 {
@@ -175,6 +193,9 @@ void IPU3Awb::initialise(ipu3_uapi_params &params, const Size &bdsOutputSize, st
 
 	params.use.acc_gamma = 1;
 	params.acc_param.gamma.gc_ctrl.enable = 1;
+
+	params.use.acc_dm = 1;
+	params.acc_param.dm = imguCssDmDefaults;
 
 	zones_.reserve(kAwbStatsSizeX * kAwbStatsSizeY);
 }
