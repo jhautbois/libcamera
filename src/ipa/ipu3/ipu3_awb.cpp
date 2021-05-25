@@ -388,7 +388,7 @@ void IPU3Awb::updateWbParameters(ipu3_uapi_params &params, double agcGamma)
 	/*
 	 * Green gains should not be touched and considered 1.
 	 * Default is 16, so do not change it at all.
-	 * 4096 is the value for a gain of 1.0
+	 * 8192 is the value for a gain of 1.0
 	 */
 	params.acc_param.bnr.wb_gains.gr = 8192;
 	params.acc_param.bnr.wb_gains.r = 8192 * asyncResults_.redGain;
