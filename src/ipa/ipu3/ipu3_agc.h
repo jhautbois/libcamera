@@ -7,6 +7,8 @@
 #ifndef __LIBCAMERA_IPU3_AGC_H__
 #define __LIBCAMERA_IPU3_AGC_H__
 
+#include "ipu3_common.h"
+
 #include <array>
 #include <unordered_map>
 
@@ -17,6 +19,7 @@
 #include <libcamera/geometry.h>
 
 #include "libipa/algorithm.h"
+#include "libipa/isp.h"
 
 namespace libcamera {
 
@@ -39,6 +42,15 @@ private:
 	void processBrightness(const ipu3_uapi_stats_3a *stats);
 	void filterExposure();
 	void lockExposureGain(uint32_t &exposure, uint32_t &gain);
+	void generateStats(const ipu3_uapi_stats_3a *stats);
+	void clearStats();
+	void generateZones(std::vector<RGB> &zones);
+	double compute_initial_Y(IspStatsRegion regions[], AwbStatus const &awb,
+				 double weights[], double gain);
+
+	std::vector<RGB> zones_;
+	uint32_t minZonesCounted_;
+	IspStatsRegion awbStats_[kAwbStatsSizeX * kAwbStatsSizeY];
 
 	struct ipu3_uapi_grid_config aeGrid_;
 	ControlInfoMap ctrls_;

@@ -18,8 +18,6 @@ namespace ipa::ipu3 {
 
 LOG_DEFINE_CATEGORY(IPU3Awb)
 
-static constexpr uint32_t kMinGreenLevelInZone = 16;
-
 /**
  * \struct IspStatsRegion
  * \brief RGB statistics for a given region
@@ -225,10 +223,10 @@ void IPU3Awb::initialise(ipu3_uapi_params &params, const Size &bdsOutputSize, st
 
 	params.use.obgrid = 1;
 	params.use.obgrid_param = 1;
-	params.obgrid_param.b = 60;
-	params.obgrid_param.r = 60;
-	params.obgrid_param.gb = 64;
-	params.obgrid_param.gr = 65;
+	params.obgrid_param.b = 35;//112; // 28
+	params.obgrid_param.r = 35;//104; // 26
+	params.obgrid_param.gb = 35;//140; // 35
+	params.obgrid_param.gr = 35;//140; // 35
 
 	zones_.reserve(kAwbStatsSizeX * kAwbStatsSizeY);
 }
@@ -383,6 +381,11 @@ void IPU3Awb::calculateWBGains(const ipu3_uapi_stats_3a *stats)
 	}
 }
 
+void IPU3Awb::process(const ipu3_uapi_stats_3a *stats)
+{
+	calculateWBGains(stats);
+}
+
 void IPU3Awb::updateWbParameters(ipu3_uapi_params &params, double agcGamma)
 {
 	/*
@@ -390,10 +393,10 @@ void IPU3Awb::updateWbParameters(ipu3_uapi_params &params, double agcGamma)
 	 * Default is 16, so do not change it at all.
 	 * 8192 is the value for a gain of 1.0
 	 */
-	params.acc_param.bnr.wb_gains.gr = 8192;
-	params.acc_param.bnr.wb_gains.r = 8192 * asyncResults_.redGain;
-	params.acc_param.bnr.wb_gains.b = 8192 * asyncResults_.blueGain;
-	params.acc_param.bnr.wb_gains.gb = 8192;
+	params.acc_param.bnr.wb_gains.gr = 8192 / asyncResults_.redGain;
+	params.acc_param.bnr.wb_gains.r = 8192; // * asyncResults_.redGain;
+	params.acc_param.bnr.wb_gains.b = 8192; // * asyncResults_.blueGain;
+	params.acc_param.bnr.wb_gains.gb = 8192 / asyncResults_.blueGain;
 
 	LOG(IPU3Awb, Debug) << "Color temperature estimated: " << asyncResults_.temperatureK
 			    << " and gamma calculated: " << agcGamma;

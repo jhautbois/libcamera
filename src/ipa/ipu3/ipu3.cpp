@@ -262,7 +262,7 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 	ControlList ctrls(controls::controls);
 
 	agcAlgo_->process(stats, exposure_, gain_);
-	awbAlgo_->calculateWBGains(stats);
+	awbAlgo_->process(stats);
 
 	if (agcAlgo_->updateControls())
 		setControls(frame);
