@@ -268,7 +268,7 @@ double IPU3Agc::compute_initial_Y(IspStatsRegion regions[], AwbStatus const &awb
 	// Note how the calculation below means that equal weights give you
 	// "average" metering (i.e. all pixels equally important).
 	double R_sum = 0, G_sum = 0, B_sum = 0, pixel_sum = 0;
-	for (int i = 0; i < kAwbStatsSizeX * kAwbStatsSizeY; i++) {
+	for (unsigned int i = 0; i < kAwbStatsSizeX * kAwbStatsSizeY; i++) {
 		double counted = regions[i].counted;
 		double r_sum = std::min(regions[i].rSum * gain, ((1 << kPipelineBits) - 1) * counted);
 		double g_sum = std::min(regions[i].gSum * gain, ((1 << kPipelineBits) - 1) * counted);
