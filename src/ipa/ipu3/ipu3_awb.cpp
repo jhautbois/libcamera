@@ -127,7 +127,7 @@ static const struct ipu3_uapi_awb_config_s imguCssAwbDefaults = {
 /* Default color correction matrix defined as an identity matrix */
 static const struct ipu3_uapi_ccm_mat_config imguCssCcmDefault = {
 	8191, 0, 0, 0,
-	0, 8191, 0, 0,
+	0, 6400, 0, 0,
 	0, 0, 8191, 0
 };
 
@@ -393,10 +393,10 @@ void IPU3Awb::updateWbParameters(ipu3_uapi_params &params, double agcGamma)
 	 * Default is 16, so do not change it at all.
 	 * 8192 is the value for a gain of 1.0
 	 */
-	params.acc_param.bnr.wb_gains.gr = 8192 / asyncResults_.redGain;
-	params.acc_param.bnr.wb_gains.r = 8192; // * asyncResults_.redGain;
-	params.acc_param.bnr.wb_gains.b = 8192; // * asyncResults_.blueGain;
-	params.acc_param.bnr.wb_gains.gb = 8192 / asyncResults_.blueGain;
+	params.acc_param.bnr.wb_gains.gr = 8192;
+	params.acc_param.bnr.wb_gains.r = 8192 * asyncResults_.redGain;
+	params.acc_param.bnr.wb_gains.b = 8192 * asyncResults_.blueGain;
+	params.acc_param.bnr.wb_gains.gb = 8192;
 
 	LOG(IPU3Awb, Debug) << "Color temperature estimated: " << asyncResults_.temperatureK
 			    << " and gamma calculated: " << agcGamma;
