@@ -267,9 +267,6 @@ void IPU3Awb::generateZones(std::vector<RGB> &zones)
 	for (unsigned int i = 0; i < kAwbStatsSizeX * kAwbStatsSizeY; i++) {
 		RGB zone;
 		double counted = awbStats_[i].counted;
-		LOG(IPU3Awb, Debug) << counted << " counted values with a minimum of "
-				    << minZonesCounted_ << " "
-				    << awbStats_[i].gSum / counted << " green zones";
 		if (counted >= minZonesCounted_) {
 			zone.G = awbStats_[i].gSum / counted;
 			if (zone.G >= kMinGreenLevelInZone) {

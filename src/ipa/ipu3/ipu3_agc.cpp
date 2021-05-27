@@ -34,7 +34,8 @@ IPU3Agc::IPU3Agc()
 	: frameCount_(0), lastFrame_(0), converged_(false),
 	  updateControls_(false), iqMean_(0.0), gamma_(1.0),
 	  prevExposure_(0.0), prevExposureNoDg_(0.0),
-	  currentExposure_(0.0), currentExposureNoDg_(0.0)
+	  currentExposure_(0.0), currentExposureNoDg_(0.0),
+	  currentShutter_(1.0), currentAnalogueGain_(1.0)
 {
 }
 
@@ -84,6 +85,8 @@ void IPU3Agc::generateStats(const ipu3_uapi_stats_3a *stats)
 	uint32_t regionHeight = round(aeGrid_.height / static_cast<double>(kAgcStatsSizeY));
 	uint32_t hist[knumHistogramBins] = { 0 };
 
+	LOG(IPU3Agc, Debug) << "[" << regionWidth << "x"<< regionHeight << "] regions";
+
 	/*
 	 * Generate a (kAgcStatsSizeX x kAgcStatsSizeY) array from the IPU3 grid which is
 	 * (aeGrid_.width x aeGrid_.height).
@@ -103,7 +106,7 @@ void IPU3Agc::generateStats(const ipu3_uapi_stats_3a *stats)
 				/* The cell is not saturated, use the current cell */
 				agcStats_[agcRegionPosition].counted++;
 				uint32_t greenValue = currentCell->greenRedAvg + currentCell->greenBlueAvg;
-				hist[greenValue / 2]++;
+				hist[greenValue/2]++;
 				agcStats_[agcRegionPosition].gSum += greenValue / 2;
 				agcStats_[agcRegionPosition].rSum += currentCell->redAvg;
 				agcStats_[agcRegionPosition].bSum += currentCell->blueAvg;
