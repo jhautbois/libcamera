@@ -32,7 +32,7 @@ static constexpr uint8_t kPipelineBits = 8;
 
 IPU3Agc::IPU3Agc()
 	: frameCount_(0), lastFrame_(0), converged_(false),
-	  updateControls_(false), iqMean_(0.0), gamma_(1.0),
+	  updateControls_(false), iqMean_(0.0), gamma_(1.4),
 	  prevExposure_(0.0), prevExposureNoDg_(0.0),
 	  currentExposure_(0.0), currentExposureNoDg_(0.0),
 	  currentShutter_(1.0), currentAnalogueGain_(1.0)
@@ -66,13 +66,15 @@ void IPU3Agc::initialise(struct ipu3_uapi_grid_config &bdsGrid, const IPAConfigI
 	shutterConstraints_.push_back(100);
 	shutterConstraints_.push_back(10000);
 	shutterConstraints_.push_back(30000);
-	shutterConstraints_.push_back(60000);
-	shutterConstraints_.push_back(66666);
+	shutterConstraints_.push_back(33000);
+	shutterConstraints_.push_back(36000);
+	shutterConstraints_.push_back(40000);
 	gainConstraints_.push_back(1.0);
 	gainConstraints_.push_back(2.0);
 	gainConstraints_.push_back(4.0);
-	gainConstraints_.push_back(6.0);
-	gainConstraints_.push_back(6.0);
+	gainConstraints_.push_back(8.0);
+	gainConstraints_.push_back(12.0);
+	gainConstraints_.push_back(16.0);
 
 	fixedShutter_ = 0.0;
 	fixedAnalogueGain_ = 0.0;
@@ -137,7 +139,7 @@ void IPU3Agc::clearStats()
 
 void IPU3Agc::filterExposure()
 {
-	double speed = 0.1;
+	double speed = 0.08;
 	if (prevExposure_ == 0.0) {
 		/* DG stands for digital gain.*/
 		prevExposure_ = currentExposure_;

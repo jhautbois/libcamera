@@ -127,7 +127,7 @@ static const struct ipu3_uapi_awb_config_s imguCssAwbDefaults = {
 /* Default color correction matrix defined as an identity matrix */
 static const struct ipu3_uapi_ccm_mat_config imguCssCcmDefault = {
 	8191, 0, 0, 0,
-	0, 6400, 0, 0,
+	0, 6200, 0, 0,
 	0, 0, 8191, 0
 };
 
