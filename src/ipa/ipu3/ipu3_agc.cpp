@@ -82,6 +82,7 @@ void IPU3Agc::generateStats(const ipu3_uapi_stats_3a *stats)
 {
 	uint32_t regionWidth = round(aeGrid_.width / static_cast<double>(kAgcStatsSizeX));
 	uint32_t regionHeight = round(aeGrid_.height / static_cast<double>(kAgcStatsSizeY));
+	uint32_t hist[knumHistogramBins] = { 0 };
 
 	/*
 	 * Generate a (kAgcStatsSizeX x kAgcStatsSizeY) array from the IPU3 grid which is
@@ -102,12 +103,16 @@ void IPU3Agc::generateStats(const ipu3_uapi_stats_3a *stats)
 				/* The cell is not saturated, use the current cell */
 				agcStats_[agcRegionPosition].counted++;
 				uint32_t greenValue = currentCell->greenRedAvg + currentCell->greenBlueAvg;
+				hist[greenValue / 2]++;
 				agcStats_[agcRegionPosition].gSum += greenValue / 2;
 				agcStats_[agcRegionPosition].rSum += currentCell->redAvg;
 				agcStats_[agcRegionPosition].bSum += currentCell->blueAvg;
 			}
 		}
 	}
+
+	/* Estimate the quantile mean of the top 2% of the histogram */
+	iqMean_ = Histogram(Span<uint32_t>(hist)).interQuantileMean(0.98, 1.0);
 }
 
 void IPU3Agc::clearStats()
@@ -125,50 +130,6 @@ void IPU3Agc::clearStats()
 	awb_.redGain = 1.0;
 
 	std::copy(std::begin(kCenteredWeights), std::end(kCenteredWeights), std::begin(weights_));
-}
-
-void IPU3Agc::processBrightness(const ipu3_uapi_stats_3a *stats)
-{
-	const struct ipu3_uapi_grid_config statsAeGrid = stats->stats_4a_config.awb_config.grid;
-	Rectangle aeRegion = { statsAeGrid.x_start,
-			       statsAeGrid.y_start,
-			       static_cast<unsigned int>(statsAeGrid.x_end - statsAeGrid.x_start) + 1,
-			       static_cast<unsigned int>(statsAeGrid.y_end - statsAeGrid.y_start) + 1 };
-	Point topleft = aeRegion.topLeft();
-	int topleftX = topleft.x >> aeGrid_.block_width_log2;
-	int topleftY = topleft.y >> aeGrid_.block_height_log2;
-
-	/* Align to the grid cell width and height */
-	uint32_t startX = topleftX << aeGrid_.block_width_log2;
-	uint32_t startY = topleftY * aeGrid_.width << aeGrid_.block_width_log2;
-	uint32_t endX = (startX + (aeRegion.size().width >> aeGrid_.block_width_log2)) << aeGrid_.block_width_log2;
-	uint32_t i, j;
-	uint32_t count = 0;
-
-	uint32_t hist[knumHistogramBins] = { 0 };
-	for (j = topleftY;
-	     j < topleftY + (aeRegion.size().height >> aeGrid_.block_height_log2);
-	     j++) {
-		for (i = startX + startY; i < endX + startY; i += kCellSize) {
-			/*
-			 * The grid width (and maybe height) is not reliable.
-			 * We observed a bit shift which makes the value 160 to be 32 in the stats grid.
-			 * Use the one passed at init time.
-			 */
-			if (stats->awb_raw_buffer.meta_data[i + 4 + j * aeGrid_.width] == 0) {
-				uint8_t Gr = stats->awb_raw_buffer.meta_data[i + 0 + j * aeGrid_.width];
-				uint8_t Gb = stats->awb_raw_buffer.meta_data[i + 3 + j * aeGrid_.width];
-				hist[(Gr + Gb) / 2]++;
-				count++;
-			}
-		}
-	}
-
-	/* Limit the gamma effect for now */
-	gamma_ = 1.1;
-
-	/* Estimate the quantile mean of the top 2% of the histogram */
-	iqMean_ = Histogram(Span<uint32_t>(hist)).interQuantileMean(0.98, 1.0);
 }
 
 void IPU3Agc::filterExposure()
@@ -308,7 +269,6 @@ void IPU3Agc::process(const ipu3_uapi_stats_3a *stats, uint32_t &exposure, uint3
 	ASSERT(stats->stats_3a_status.awb_en);
 	clearStats();
 	generateStats(stats);
-	processBrightness(stats);
 	currentShutter_ = exposure * lineDuration_;
 	/* \todo: the gain needs to be calculated based on sensor informations */
 	currentAnalogueGain_ = analogueGain / 16;
