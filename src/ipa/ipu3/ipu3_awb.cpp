@@ -299,7 +299,7 @@ void IPU3Awb::generateAwbStats(const ipu3_uapi_stats_3a *stats)
 			uint32_t cellY = ((cellPosition / awbGrid_.width) / regionHeight) % kAwbStatsSizeY;
 
 			uint32_t awbRegionPosition = cellY * kAwbStatsSizeX + cellX;
-			cellPosition *= 8;
+			cellPosition *= sizeof(Ipu3AwbCell);
 
 			/* Cast the initial IPU3 structure to simplify the reading */
 			Ipu3AwbCell *currentCell = reinterpret_cast<Ipu3AwbCell *>(const_cast<uint8_t *>(&stats->awb_raw_buffer.meta_data[cellPosition]));

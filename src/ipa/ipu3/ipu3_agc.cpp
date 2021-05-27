@@ -27,9 +27,6 @@ LOG_DEFINE_CATEGORY(IPU3Agc)
 /* Histogram constants */
 static constexpr uint32_t knumHistogramBins = 256;
 
-/* A cell is 8 bytes and contains averages for RGB values and saturation ratio */
-static constexpr uint8_t kCellSize = 8;
-
 /* seems to be a 8-bit pipeline */
 static constexpr uint8_t kPipelineBits = 8;
 
