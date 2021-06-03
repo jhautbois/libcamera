@@ -19,10 +19,12 @@
 #include <libcamera/request.h>
 
 #include "libcamera/internal/buffer.h"
+#include "libcamera/internal/camera_sensor_properties.h"
 #include "libcamera/internal/log.h"
 
 #include "ipu3_agc.h"
 #include "ipu3_awb.h"
+#include "libipa/camera_sensor_helper.h"
 
 static constexpr uint32_t kMaxCellWidthPerSet = 160;
 static constexpr uint32_t kMaxCellHeightPerSet = 56;
@@ -36,10 +38,7 @@ namespace ipa::ipu3 {
 class IPAIPU3 : public IPAIPU3Interface
 {
 public:
-	int init([[maybe_unused]] const IPASettings &settings) override
-	{
-		return 0;
-	}
+	int init(const IPASettings &settings) override;
 	int start() override;
 	void stop() override {}
 
@@ -75,12 +74,39 @@ private:
 	std::unique_ptr<IPU3Awb> awbAlgo_;
 	/* Interface to the AEC/AGC algorithm */
 	std::unique_ptr<IPU3Agc> agcAlgo_;
+	/* Interface to the Camera Helper */
+	std::unique_ptr<CameraSensorHelper> camHelper_;
 
 	/* Local parameter storage */
 	struct ipu3_uapi_params params_;
 
 	struct ipu3_uapi_grid_config bdsGrid_;
 };
+
+int IPAIPU3::init(const IPASettings &settings)
+{
+	std::vector<CameraSensorHelperFactory *> &factories =
+		CameraSensorHelperFactory::factories();
+
+	for (CameraSensorHelperFactory *factory : factories) {
+		LOG(IPAIPU3, Debug)
+			<< "Found registered camera sensor helper '"
+			<< factory->name() << "'";
+
+		std::unique_ptr<CameraSensorHelper> camHelper = factory->create();
+
+		if (camHelper->name() != settings.sensorModel)
+			continue;
+
+		LOG(IPAIPU3, Debug)
+			<< "Camera sensor helper \"" << factory->name()
+			<< "\" matched";
+
+		camHelper_ = std::move(camHelper);
+	}
+
+	return 0;
+}
 
 int IPAIPU3::start()
 {
@@ -267,7 +293,9 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 {
 	ControlList ctrls(controls::controls);
 
-	agcAlgo_->process(stats, exposure_, gain_);
+	double gain = camHelper_->getGain(gain_);
+	agcAlgo_->process(stats, exposure_, gain);
+	gain_ = camHelper_->getGainCode(gain);
 	awbAlgo_->process(stats);
 
 	if (agcAlgo_->updateControls())

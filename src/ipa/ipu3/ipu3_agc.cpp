@@ -261,14 +261,14 @@ void IPU3Agc::computeGain(double &currentGain)
 	LOG(IPU3Agc, Debug) << "gain: " << currentGain << " new gain: " << newGain;
 }
 
-void IPU3Agc::process(const ipu3_uapi_stats_3a *stats, uint32_t &exposure, uint32_t &analogueGain)
+void IPU3Agc::process(const ipu3_uapi_stats_3a *stats, uint32_t &exposure, double &analogueGain)
 {
 	ASSERT(stats->stats_3a_status.awb_en);
 	clearStats();
 	generateStats(stats);
 	currentShutter_ = exposure * lineDuration_;
 	/* \todo: the gain needs to be calculated based on sensor informations */
-	currentAnalogueGain_ = std::max(minGain_, analogueGain / 16);
+	currentAnalogueGain_ = analogueGain;
 	currentExposureNoDg_ = currentShutter_ * currentAnalogueGain_;
 
 	double currentGain;
@@ -278,7 +278,7 @@ void IPU3Agc::process(const ipu3_uapi_stats_3a *stats, uint32_t &exposure, uint3
 	divideUpExposure();
 
 	exposure = filteredShutter_ / lineDuration_;
-	analogueGain = filteredAnalogueGain_ * 16;
+	analogueGain = filteredAnalogueGain_;
 
 	updateControls_ = true;
 	frameCount_++;

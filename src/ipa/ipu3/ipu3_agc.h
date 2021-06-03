@@ -32,7 +32,7 @@ public:
 	~IPU3Agc() = default;
 
 	void initialise(struct ipu3_uapi_grid_config &bdsGrid, const IPAConfigInfo &configInfo);
-	void process(const ipu3_uapi_stats_3a *stats, uint32_t &exposure, uint32_t &analogueGain);
+	void process(const ipu3_uapi_stats_3a *stats, uint32_t &exposure, double &analogueGain);
 	bool converged() { return converged_; }
 	bool updateControls() { return updateControls_; }
 	/* \todo Use a metadata exchange between IPAs */
@@ -41,7 +41,7 @@ public:
 private:
 	void processBrightness(const ipu3_uapi_stats_3a *stats);
 	void filterExposure();
-	void lockExposureGain(uint32_t &exposure, uint32_t &gain);
+	void lockExposureGain(uint32_t &exposure, double &gain);
 	void generateStats(const ipu3_uapi_stats_3a *stats);
 	void clearStats();
 	void generateZones(std::vector<RGB> &zones);
