@@ -66,10 +66,41 @@ ExperimentalAutoDetectBinPacking: false
 FixNamespaceComments: true
 ForEachMacros:
   - 'udev_list_entry_foreach'
-IncludeBlocks: Preserve
+SortIncludes: true
+IncludeBlocks: Regroup
 IncludeCategories:
-  - Regex: '.*'
-    Priority: 1
+  # Headers in <> with or without extension. (system libraries)
+  - Regex:           '<([A-Za-z0-9\-_])+.h>'
+    Priority:        1 
+  - Regex:           '<sys/.*>'
+    Priority:        1
+  # Linux headers, as a second group/subset of system headers
+  - Regex:           '<linux/.*>'
+    Priority:        2
+  # C++ library includes (no .h)
+  - Regex:           '<([A-Za-z0-9\-_])+>'
+    Priority:        3
+  # Headers for Base support
+  - Regex:           '<libcamera/base/private.h>'
+    Priority:        4
+  - Regex:           '<libcamera/base/([A-Za-z0-9])+.*>'
+    Priority:        5
+  # Headers for libcamera, which are not in a subdir (i.e. ipa/,internal/)
+  - Regex:           '<libcamera/([A-Za-z0-9\-_])+.h>'
+    Priority:        6
+  # IPA Interfaces
+  - Regex:           '<libcamera/ipa/([A-Za-z0-9])+.*>'
+    Priority:        7
+  # libcamera Internal headers in ""  
+  - Regex:           '"libcamera/internal/.*\.h"'
+    Priority:        8
+  # local modular includes
+  - Regex:           '".*/.*\.h"'
+    Priority:        9
+  # Other local headers "" with extension.
+  - Regex:           '"([A-Za-z0-9.\/-_])+"'
+    Priority:        10
+
 IncludeIsMainRegex: '(_test)?$'
 IndentCaseLabels: false
 IndentPPDirectives: None
