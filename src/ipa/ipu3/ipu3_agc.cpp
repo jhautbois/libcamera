@@ -10,10 +10,12 @@
 #include <algorithm>
 #include <cmath>
 #include <numeric>
+#include <stdint.h>
+
+#include <linux/v4l2-controls.h>
 
 #include <libcamera/base/log.h>
-
-#include <libcamera/ipa/core_ipa_interface.h>
+#include <libcamera/base/utils.h>
 
 #include "libipa/histogram.h"
 
@@ -59,12 +61,28 @@ IPU3Agc::IPU3Agc()
 {
 }
 
-void IPU3Agc::initialise(struct ipu3_uapi_grid_config &bdsGrid, const IPACameraSensorInfo &sensorInfo)
+void IPU3Agc::initialise(struct ipu3_uapi_grid_config &bdsGrid, const IPAConfigInfo &configInfo)
 {
 	aeGrid_ = bdsGrid;
+	ctrls_ = configInfo.entityControls.at(0);
 
-	lineDuration_ = sensorInfo.lineLength * 1.0s / sensorInfo.pixelRate;
-	maxExposureTime_ = kMaxExposure * lineDuration_;
+	const auto itExp = ctrls_.find(V4L2_CID_EXPOSURE);
+	if (itExp == ctrls_.end()) {
+		LOG(IPU3Agc, Debug) << "Can't find exposure control";
+		return;
+	}
+	minExposure_ = itExp->second.min().get<int32_t>();
+	maxExposure_ = itExp->second.max().get<int32_t>();
+	lineDuration_ = configInfo.sensorInfo.lineLength * 1.0s / configInfo.sensorInfo.pixelRate;
+	maxExposureTime_ = maxExposure_ * lineDuration_;
+
+	const auto itGain = ctrls_.find(V4L2_CID_ANALOGUE_GAIN);
+	if (itGain == ctrls_.end()) {
+		LOG(IPU3Agc, Debug) << "Can't find gain control";
+		return;
+	}
+	minGain_ = std::max(itGain->second.min().get<int32_t>(), 1);
+	maxGain_ = itGain->second.max().get<int32_t>();
 }
 
 void IPU3Agc::processBrightness(const ipu3_uapi_stats_3a *stats)

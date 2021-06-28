@@ -15,7 +15,7 @@
 #include <linux/intel-ipu3.h>
 
 #include <libcamera/base/utils.h>
-
+#include <libcamera/ipa/ipu3_ipa_interface.h>
 #include <libcamera/geometry.h>
 
 #include "libipa/algorithm.h"
@@ -35,8 +35,8 @@ public:
 	IPU3Agc();
 	~IPU3Agc() = default;
 
-	void initialise(struct ipu3_uapi_grid_config &bdsGrid, const IPACameraSensorInfo &sensorInfo);
 	void process(const ipu3_uapi_stats_3a *stats, uint32_t &exposure, double &gain);
+	void initialise(struct ipu3_uapi_grid_config &bdsGrid, const IPAConfigInfo &configInfo);
 	bool converged() { return converged_; }
 	bool updateControls() { return updateControls_; }
 	/* \todo Use a metadata exchange between IPAs */
@@ -48,6 +48,13 @@ private:
 	void lockExposureGain(uint32_t &exposure, double &gain);
 
 	struct ipu3_uapi_grid_config aeGrid_;
+	ControlInfoMap ctrls_;
+
+	uint32_t minExposure_;
+	uint32_t maxExposure_;
+
+	uint32_t minGain_;
+	uint32_t maxGain_;
 
 	uint64_t frameCount_;
 	uint64_t lastFrame_;

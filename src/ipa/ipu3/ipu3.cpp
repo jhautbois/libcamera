@@ -67,11 +67,7 @@ private:
 	/* Camera sensor controls. */
 	uint32_t defVBlank_;
 	uint32_t exposure_;
-	uint32_t minExposure_;
-	uint32_t maxExposure_;
 	uint32_t gain_;
-	uint32_t minGain_;
-	uint32_t maxGain_;
 
 	/* Interface to the AWB algorithm */
 	std::unique_ptr<IPU3Awb> awbAlgo_;
@@ -187,13 +183,9 @@ int IPAIPU3::configure(const IPAConfigInfo &configInfo)
 		return -EINVAL;
 	}
 
-	minExposure_ = std::max(itExp->second.min().get<int32_t>(), 1);
-	maxExposure_ = itExp->second.max().get<int32_t>();
-	exposure_ = minExposure_;
+	exposure_ = itExp->second.def().get<int32_t>();
 
-	minGain_ = std::max(itGain->second.min().get<int32_t>(), 1);
-	maxGain_ = itGain->second.max().get<int32_t>();
-	gain_ = minGain_;
+	gain_ = itGain->second.def().get<int32_t>();
 
 	defVBlank_ = itVBlank->second.def().get<int32_t>();
 
@@ -205,7 +197,7 @@ int IPAIPU3::configure(const IPAConfigInfo &configInfo)
 	awbAlgo_->initialise(params_, configInfo.bdsOutputSize, bdsGrid_);
 
 	agcAlgo_ = std::make_unique<IPU3Agc>();
-	agcAlgo_->initialise(bdsGrid_, sensorInfo_);
+	agcAlgo_->initialise(bdsGrid_, configInfo);
 
 	return 0;
 }
