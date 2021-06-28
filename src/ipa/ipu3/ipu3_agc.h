@@ -35,8 +35,8 @@ public:
 	IPU3Agc();
 	~IPU3Agc() = default;
 
-	void process(const ipu3_uapi_stats_3a *stats, uint32_t &exposure, double &gain);
 	void initialise(struct ipu3_uapi_grid_config &bdsGrid, const IPAConfigInfo &configInfo);
+	void process(const ipu3_uapi_stats_3a *stats, uint32_t &exposure, double &analogueGain);
 	bool converged() { return converged_; }
 	bool updateControls() { return updateControls_; }
 	/* \todo Use a metadata exchange between IPAs */
@@ -46,6 +46,17 @@ private:
 	void processBrightness(const ipu3_uapi_stats_3a *stats);
 	void filterExposure();
 	void lockExposureGain(uint32_t &exposure, double &gain);
+	void generateStats(const ipu3_uapi_stats_3a *stats);
+	void clearStats();
+	void generateZones(std::vector<RGB> &zones);
+	double computeInitialY(IspStatsRegion regions[], AwbStatus const &awb, double weights[], double gain);
+	void computeTargetExposure(double currentGain);
+	void divideUpExposure();
+	void computeGain(double &currentGain);
+
+	AwbStatus awb_;
+	double weights_[kNumAgcWeightedZones];
+	IspStatsRegion agcStats_[kNumAgcWeightedZones];
 
 	struct ipu3_uapi_grid_config aeGrid_;
 	ControlInfoMap ctrls_;
@@ -72,6 +83,16 @@ private:
 	Duration prevExposureNoDg_;
 	Duration currentExposure_;
 	Duration currentExposureNoDg_;
+
+	Duration currentShutter_;
+	std::vector<Duration> shutterConstraints_;
+	Duration fixedShutter_;
+	Duration filteredShutter_;
+
+	double currentAnalogueGain_;
+	std::vector<double> gainConstraints_;
+	double fixedAnalogueGain_;
+	double filteredAnalogueGain_;
 };
 
 } /* namespace ipa::ipu3 */
