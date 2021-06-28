@@ -296,7 +296,7 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 	agcAlgo_->process(stats, exposure_, gain);
 	gain_ = camHelper_->gainCode(gain);
 
-	awbAlgo_->calculateWBGains(stats);
+	awbAlgo_->process(stats);
 
 	if (agcAlgo_->updateControls())
 		setControls(frame);

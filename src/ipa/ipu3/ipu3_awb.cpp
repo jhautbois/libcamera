@@ -351,6 +351,11 @@ void IPU3Awb::calculateWBGains(const ipu3_uapi_stats_3a *stats)
 	}
 }
 
+void IPU3Awb::process(const ipu3_uapi_stats_3a *stats)
+{
+	calculateWBGains(stats);
+}
+
 void IPU3Awb::updateWbParameters(ipu3_uapi_params &params, double agcGamma)
 {
 	/*
