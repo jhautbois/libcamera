@@ -123,12 +123,16 @@ void IPAIPU3::calculateBdsGrid(const Size &bdsOutputSize)
 	bdsGrid_ = {};
 
 	for (uint32_t widthShift = 3; widthShift <= 7; ++widthShift) {
-		uint32_t width = std::min(kMaxCellWidthPerSet,
-					  bdsOutputSize.width >> widthShift);
+		uint32_t width = std::clamp(bdsOutputSize.width >> widthShift,
+					    2 * kAwbStatsSizeX,
+					    kMaxCellWidthPerSet);
+
 		width = width << widthShift;
 		for (uint32_t heightShift = 3; heightShift <= 7; ++heightShift) {
-			int32_t height = std::min(kMaxCellHeightPerSet,
-						  bdsOutputSize.height >> heightShift);
+			uint32_t height = std::clamp(bdsOutputSize.height >> heightShift,
+						     2 * kAwbStatsSizeY,
+						     kMaxCellHeightPerSet);
+
 			height = height << heightShift;
 			uint32_t error  = std::abs(static_cast<int>(width - bdsOutputSize.width))
 							+ std::abs(static_cast<int>(height - bdsOutputSize.height));

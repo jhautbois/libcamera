@@ -49,6 +49,7 @@ private:
 	std::vector<RGB> zones_;
 	IspStatsRegion awbStats_[kAwbStatsSizeX * kAwbStatsSizeY];
 	AwbStatus asyncResults_;
+	uint32_t minZonesCounted_;
 };
 
 } /* namespace ipa::ipu3 */
