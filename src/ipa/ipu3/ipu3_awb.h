@@ -7,6 +7,8 @@
 #ifndef __LIBCAMERA_IPU3_AWB_H__
 #define __LIBCAMERA_IPU3_AWB_H__
 
+#include "ipu3_common.h"
+
 #include <vector>
 
 #include <linux/intel-ipu3.h>
@@ -33,15 +35,6 @@ public:
 	void initialise(ipu3_uapi_params &params, const Size &bdsOutputSize, struct ipu3_uapi_grid_config &bdsGrid);
 	void calculateWBGains(const ipu3_uapi_stats_3a *stats);
 	void updateWbParameters(ipu3_uapi_params &params, double agcGamma);
-
-	struct Ipu3AwbCell {
-		unsigned char greenRedAvg;
-		unsigned char redAvg;
-		unsigned char blueAvg;
-		unsigned char greenBlueAvg;
-		unsigned char satRatio;
-		unsigned char padding[3];
-	} __attribute__((packed));
 
 private:
 	void generateZones(std::vector<RGB> &zones);
