@@ -998,7 +998,7 @@ int CameraCapabilities::initializeStaticMetadata()
 					  physicalSize);
 	}
 
-	{
+	if (properties.contains(properties::PixelArrayActiveAreas)) {
 		const Span<const Rectangle> &rects =
 			properties.get(properties::PixelArrayActiveAreas);
 		std::vector<int32_t> data{
