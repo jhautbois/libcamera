@@ -117,21 +117,23 @@ void IPAIPU3::calculateBdsGrid(const Size &bdsOutputSize)
 	Size best;
 	Size bestLog2;
 	bdsGrid_ = {};
+	Size inputSize = bdsOutputSize;
+	inputSize.width -= 128;
+	inputSize.height -= 64;
 
 	for (uint32_t widthShift = 3; widthShift <= 7; ++widthShift) {
-		uint32_t width = std::clamp(bdsOutputSize.width >> widthShift,
+		uint32_t width = std::clamp(inputSize.width >> widthShift,
 					    2 * kAwbStatsSizeX,
 					    kMaxCellWidthPerSet);
 
 		width = width << widthShift;
 		for (uint32_t heightShift = 3; heightShift <= 7; ++heightShift) {
-			uint32_t height = std::clamp(bdsOutputSize.height >> heightShift,
-						     2 * kAwbStatsSizeY,
+			uint32_t height = std::clamp(inputSize.height >> heightShift,   2 * kAwbStatsSizeY,
 						     kMaxCellHeightPerSet);
 
 			height = height << heightShift;
-			uint32_t error  = std::abs(static_cast<int>(width - bdsOutputSize.width))
-							+ std::abs(static_cast<int>(height - bdsOutputSize.height));
+			uint32_t error  = std::abs(static_cast<int>(width - inputSize.width))
+							+ std::abs(static_cast<int>(height - inputSize.height));
 
 			if (error > minError)
 				continue;
@@ -148,6 +150,8 @@ void IPAIPU3::calculateBdsGrid(const Size &bdsOutputSize)
 	bdsGrid_.block_width_log2 = bestLog2.width;
 	bdsGrid_.height = best.height >> bestLog2.height;
 	bdsGrid_.block_height_log2 = bestLog2.height;
+	bdsGrid_.x_start = 64;
+	bdsGrid_.y_start = 32;
 
 	LOG(IPAIPU3, Debug) << "Best grid found is: ("
 			    << (int)bdsGrid_.width << " << " << (int)bdsGrid_.block_width_log2 << ") x ("

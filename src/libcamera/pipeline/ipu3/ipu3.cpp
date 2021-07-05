@@ -46,7 +46,7 @@ static constexpr unsigned int IMGU_OUTPUT_WIDTH_ALIGN = 64;
 static constexpr unsigned int IMGU_OUTPUT_HEIGHT_ALIGN = 4;
 static constexpr unsigned int IMGU_OUTPUT_WIDTH_MARGIN = 64;
 static constexpr unsigned int IMGU_OUTPUT_HEIGHT_MARGIN = 32;
-static constexpr Size IPU3ViewfinderSize(1280, 720);
+static constexpr Size IPU3ViewfinderSize(2560, 1920);
 
 static const ControlInfoMap::Map IPU3Controls = {
 	{ &controls::draft::PipelineDepth, ControlInfo(2, 3) },

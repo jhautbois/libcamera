@@ -126,9 +126,9 @@ static const struct ipu3_uapi_awb_config_s imguCssAwbDefaults = {
 
 /* Default color correction matrix defined as an identity matrix */
 static const struct ipu3_uapi_ccm_mat_config imguCssCcmDefault = {
-	8191, 0, 0, 0,
-	0, 6000, 0, 0,
-	0, 0, 8191, 0
+	7500, 0, 0, 0,//9100
+	0, 6000, 0, 0,//7800
+	0, 0, 7900, 0//8939
 };
 
 /* Default settings for Gamma correction */
@@ -199,6 +199,13 @@ void IPU3Awb::initialise(ipu3_uapi_params &params, const Size &bdsOutputSize, st
 	params.use.acc_gamma = 1;
 	params.acc_param.gamma.gc_lut = imguCssGammaLut;
 	params.acc_param.gamma.gc_ctrl.enable = 1;
+
+	params.use.obgrid = 1;
+	params.use.obgrid_param = 1;
+	params.obgrid_param.b = 125;
+	params.obgrid_param.r = 111;
+	params.obgrid_param.gb = 106;
+	params.obgrid_param.gr = 106;
 
 	zones_.reserve(kAwbStatsSizeX * kAwbStatsSizeY);
 }
