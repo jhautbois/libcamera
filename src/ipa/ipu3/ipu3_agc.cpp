@@ -37,7 +37,7 @@ static constexpr uint8_t kPipelineBits = 8;
 
 IPU3Agc::IPU3Agc()
 	: frameCount_(0), lastFrame_(0), converged_(false),
-	  updateControls_(false), iqMean_(0.0), gamma_(1.1),
+	  updateControls_(false), iqMean_(0.0), gamma_(1.0),
 	  lineDuration_(0s), maxExposureTime_(0s),
 	  prevExposure_(0s), prevExposureNoDg_(0s),
 	  currentExposure_(0s), currentExposureNoDg_(0s),
@@ -265,7 +265,7 @@ void IPU3Agc::computeGain(double &currentGain)
 			break;
 	}
 
-	double newGain = 128 / iqMean_;
+	double newGain = 100 / iqMean_;
 	LOG(IPU3Agc, Debug) << "gain: " << currentGain << " new gain: " << newGain;
 }
 
