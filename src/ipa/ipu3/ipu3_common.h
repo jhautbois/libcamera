@@ -9,9 +9,13 @@
 
 #include <stdint.h>
 
+#include <libcamera/base/utils.h>
+
 namespace libcamera {
 
-namespace ipa {
+namespace ipa::ipu3 {
+
+using utils::Duration;
 
 /* Region size for the statistics generation algorithm */
 static constexpr uint32_t kAwbStatsSizeX = 16;
@@ -42,8 +46,19 @@ struct Ipu3AwbCell {
 	unsigned char padding[3];
 } __attribute__((packed));
 
-} /* namespace ipa */
+struct AgcStatus {
+	Duration shutterTime;
+	double analogueGain;
+};
+
+struct Ipu3DeviceStatus {
+	Duration shutterSpeed;
+	double analogueGain;
+};
+
+} /* namespace ipa::ipu3 */
 
 } /* namespace libcamera */
 
 #endif /* __LIBCAMERA_IPA_IPU3_COMMON_H__ */
+

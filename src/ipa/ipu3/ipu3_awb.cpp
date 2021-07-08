@@ -350,12 +350,13 @@ void IPU3Awb::calculateWBGains(const ipu3_uapi_stats_3a *stats)
 	}
 }
 
-void IPU3Awb::process(const ipu3_uapi_stats_3a *stats)
+void IPU3Awb::process(const ipu3_uapi_stats_3a *stats, Metadata *imageMetadata)
 {
 	calculateWBGains(stats);
+	imageMetadata->set("awb.status", asyncResults_);
 }
 
-void IPU3Awb::updateWbParameters(ipu3_uapi_params &params, double agcGamma)
+void IPU3Awb::updateWbParameters(ipu3_uapi_params &params, Metadata *imageMetadata)
 {
 	/*
 	 * Green gains should not be touched and considered 1.
@@ -366,6 +367,10 @@ void IPU3Awb::updateWbParameters(ipu3_uapi_params &params, double agcGamma)
 	params.acc_param.bnr.wb_gains.r = 8192 * asyncResults_.redGain;
 	params.acc_param.bnr.wb_gains.b = 8192 * asyncResults_.blueGain;
 	params.acc_param.bnr.wb_gains.gb = 8192;
+
+	double agcGamma = 1.0;
+	if (imageMetadata->get("agc.gamma", agcGamma) != 0)
+		LOG(IPU3Awb, Debug) << "Awb: no gamma found, defaulted to 1.0";
 
 	LOG(IPU3Awb, Debug) << "Color temperature estimated: " << asyncResults_.temperatureK
 			    << " and gamma calculated: " << agcGamma;

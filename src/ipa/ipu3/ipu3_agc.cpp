@@ -8,6 +8,7 @@
  */
 
 #include "ipu3_agc.h"
+#include "ipu3_common.h"
 
 #include <algorithm>
 #include <cmath>
@@ -35,38 +36,34 @@ static constexpr uint32_t knumHistogramBins = 256;
 /* seems to be a 8-bit pipeline */
 static constexpr uint8_t kPipelineBits = 8;
 
+/**
+ * \struct AgcStatus
+ * \brief AGC parameters calculated
+ *
+ * The AgcStatus structure is intended to store the AGC
+ * parameters calculated by the algorithm
+ *
+ * \var AgcStatus::shutterTime
+ * \brief Exposure time in microseconds
+ *
+ * \var AgcStatus::analogueGain
+ * \brief Analogue gain
+ */
+
 IPU3Agc::IPU3Agc()
-	: frameCount_(0), lastFrame_(0), converged_(false),
-	  updateControls_(false), iqMean_(0.0), gamma_(1.0),
-	  lineDuration_(0s), maxExposureTime_(0s),
+	: iqMean_(0.0), gamma_(1.0),
 	  prevExposure_(0s), prevExposureNoDg_(0s),
 	  currentExposure_(0s), currentExposureNoDg_(0s),
 	  currentShutter_(1.0s), currentAnalogueGain_(1.0)
 {
+	status_.analogueGain = 1.0;
+	status_.shutterTime = 0s;
 }
 
 void IPU3Agc::initialise(struct ipu3_uapi_grid_config &bdsGrid, const IPAConfigInfo &configInfo)
 {
 	aeGrid_ = bdsGrid;
 	ctrls_ = configInfo.entityControls.at(0);
-
-	const auto itExp = ctrls_.find(V4L2_CID_EXPOSURE);
-	if (itExp == ctrls_.end()) {
-		LOG(IPU3Agc, Debug) << "Can't find exposure control";
-		return;
-	}
-	minExposure_ = itExp->second.min().get<int32_t>();
-	maxExposure_ = itExp->second.max().get<int32_t>();
-	lineDuration_ = configInfo.sensorInfo.lineLength * 1.0s / configInfo.sensorInfo.pixelRate;
-	maxExposureTime_ = maxExposure_ * lineDuration_;
-
-	const auto itGain = ctrls_.find(V4L2_CID_ANALOGUE_GAIN);
-	if (itGain == ctrls_.end()) {
-		LOG(IPU3Agc, Debug) << "Can't find gain control";
-		return;
-	}
-	minGain_ = std::max(itGain->second.min().get<int32_t>(), 1);
-	maxGain_ = itGain->second.max().get<int32_t>();
 
 	/* \todo: those values need to be extracted from a configuration file */
 	shutterConstraints_.push_back(100us);
@@ -269,27 +266,31 @@ void IPU3Agc::computeGain(double &currentGain)
 	LOG(IPU3Agc, Debug) << "gain: " << currentGain << " new gain: " << newGain;
 }
 
-void IPU3Agc::process(const ipu3_uapi_stats_3a *stats, uint32_t &exposure, double &analogueGain)
+void IPU3Agc::process(const ipu3_uapi_stats_3a *stats, Metadata *imageMetadata)
 {
+	Ipu3DeviceStatus deviceStatus;
 	ASSERT(stats->stats_3a_status.awb_en);
 	clearStats();
 	generateStats(stats);
-	currentShutter_ = exposure * lineDuration_;
-	/* \todo: the gain needs to be calculated based on sensor informations */
-	currentAnalogueGain_ = analogueGain;
+	if (imageMetadata->get("device.status", deviceStatus) == 0) {
+		currentShutter_ = deviceStatus.shutterSpeed;
+		currentAnalogueGain_ = deviceStatus.analogueGain;
+	}
 	currentExposureNoDg_ = currentShutter_ * currentAnalogueGain_;
 
 	double currentGain = 1;
+	if (imageMetadata->get("awb.status", awb_) != 0)
+		LOG(IPU3Agc, Debug) << "Agc: no AWB status found";
+
 	computeGain(currentGain);
 	computeTargetExposure(currentGain);
 	filterExposure();
 	divideUpExposure();
 
-	exposure = filteredShutter_ / lineDuration_;
-	analogueGain = filteredAnalogueGain_;
-
-	updateControls_ = true;
-	frameCount_++;
+	status_.shutterTime = filteredShutter_;
+	status_.analogueGain = filteredAnalogueGain_;
+	imageMetadata->set("agc.status", status_);
+	imageMetadata->set("agc.gamma", gamma_);
 }
 
 } /* namespace ipa::ipu3 */

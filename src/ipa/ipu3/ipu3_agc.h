@@ -22,6 +22,7 @@
 
 #include "libipa/algorithm.h"
 #include "libipa/isp.h"
+#include "libipa/metadata.h"
 
 namespace libcamera {
 
@@ -38,11 +39,7 @@ public:
 	~IPU3Agc() = default;
 
 	void initialise(struct ipu3_uapi_grid_config &bdsGrid, const IPAConfigInfo &configInfo);
-	void process(const ipu3_uapi_stats_3a *stats, uint32_t &exposure, double &analogueGain);
-	bool converged() { return converged_; }
-	bool updateControls() { return updateControls_; }
-	/* \todo Use a metadata exchange between IPAs */
-	double gamma() { return gamma_; }
+	void process(const ipu3_uapi_stats_3a *stats, Metadata *imageMetadata);
 
 private:
 	void processBrightness(const ipu3_uapi_stats_3a *stats);
@@ -63,23 +60,8 @@ private:
 	struct ipu3_uapi_grid_config aeGrid_;
 	ControlInfoMap ctrls_;
 
-	uint32_t minExposure_;
-	uint32_t maxExposure_;
-
-	uint32_t minGain_;
-	uint32_t maxGain_;
-
-	uint64_t frameCount_;
-	uint64_t lastFrame_;
-
-	bool converged_;
-	bool updateControls_;
-
 	double iqMean_;
 	double gamma_;
-
-	Duration lineDuration_;
-	Duration maxExposureTime_;
 
 	Duration prevExposure_;
 	Duration prevExposureNoDg_;
@@ -95,6 +77,8 @@ private:
 	std::vector<double> gainConstraints_;
 	double fixedAnalogueGain_;
 	double filteredAnalogueGain_;
+
+	AgcStatus status_;
 };
 
 } /* namespace ipa::ipu3 */
