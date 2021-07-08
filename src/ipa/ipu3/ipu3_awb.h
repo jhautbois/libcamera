@@ -17,14 +17,11 @@
 
 #include "libipa/algorithm.h"
 #include "libipa/isp.h"
+#include "libipa/metadata.h"
 
 namespace libcamera {
 
 namespace ipa::ipu3 {
-
-/* Region size for the statistics generation algorithm */
-static constexpr uint32_t kAwbStatsSizeX = 16;
-static constexpr uint32_t kAwbStatsSizeY = 12;
 
 class IPU3Awb : public Algorithm
 {
@@ -33,8 +30,8 @@ public:
 	~IPU3Awb();
 
 	void initialise(ipu3_uapi_params &params, const Size &bdsOutputSize, struct ipu3_uapi_grid_config &bdsGrid);
-	void process(const ipu3_uapi_stats_3a *stats);
-	void updateWbParameters(ipu3_uapi_params &params, double agcGamma);
+	void process(const ipu3_uapi_stats_3a *stats, Metadata *imageMetadata);
+	void updateWbParameters(ipu3_uapi_params &params, Metadata *imageMetadata);
 
 private:
 	void generateZones(std::vector<RGB> &zones);

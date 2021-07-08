@@ -24,6 +24,8 @@
 
 #include "ipu3_agc.h"
 #include "ipu3_awb.h"
+#include "ipu3_common.h"
+
 #include "libipa/camera_sensor_helper.h"
 
 static constexpr uint32_t kMaxCellWidthPerSet = 160;
@@ -33,7 +35,23 @@ namespace libcamera {
 
 LOG_DEFINE_CATEGORY(IPAIPU3)
 
+using namespace std::literals::chrono_literals;
+
 namespace ipa::ipu3 {
+
+/**
+ * \struct Ipu3DeviceStatus
+ * \brief Device metadata structure
+ *
+ * The Ipu3DeviceStatus structure is intended to store things like shutter time
+ * and analogue gain that downstream control algorithms will want to know.
+ *
+ * \var Ipu3DeviceStatus::shutterSpeed
+ * \brief Shutter time in microseconds
+ *
+ * \var Ipu3DeviceStatus::analogueGain
+ * \brief Analogue gain
+ */
 
 class IPAIPU3 : public IPAIPU3Interface
 {
@@ -68,6 +86,7 @@ private:
 	uint32_t defVBlank_;
 	uint32_t exposure_;
 	uint32_t gain_;
+	Duration lineDuration_;
 
 	/* Interface to the AWB algorithm */
 	std::unique_ptr<IPU3Awb> awbAlgo_;
@@ -75,6 +94,8 @@ private:
 	std::unique_ptr<IPU3Agc> agcAlgo_;
 	/* Interface to the Camera Helper */
 	std::unique_ptr<CameraSensorHelper> camHelper_;
+	/* Metadata storage */
+	Metadata metadata_;
 
 	/* Local parameter storage */
 	struct ipu3_uapi_params params_;
@@ -184,6 +205,7 @@ int IPAIPU3::configure(const IPAConfigInfo &configInfo)
 	}
 
 	exposure_ = itExp->second.def().get<int32_t>();
+	lineDuration_ = configInfo.sensorInfo.lineLength * 1.0s / configInfo.sensorInfo.pixelRate;
 
 	gain_ = itGain->second.def().get<int32_t>();
 
@@ -271,8 +293,7 @@ void IPAIPU3::processControls([[maybe_unused]] unsigned int frame,
 
 void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params)
 {
-	if (agcAlgo_->updateControls())
-		awbAlgo_->updateWbParameters(params_, agcAlgo_->gamma());
+	awbAlgo_->updateWbParameters(params_, &metadata_);
 
 	*params = params_;
 
@@ -286,16 +307,33 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 			      [[maybe_unused]] int64_t frameTimestamp,
 			      [[maybe_unused]] const ipu3_uapi_stats_3a *stats)
 {
+	Ipu3DeviceStatus deviceStatus = {};
+
 	ControlList ctrls(controls::controls);
 
-	double gain = camHelper_->gain(gain_);
-	agcAlgo_->process(stats, exposure_, gain);
-	gain_ = camHelper_->gainCode(gain);
+	/* Calculate the shutter speed in microseconds and analogue gain */
+	deviceStatus.shutterSpeed = exposure_ * lineDuration_;
+	deviceStatus.analogueGain = camHelper_->gain(gain_);
 
-	awbAlgo_->process(stats);
+	/* Set the current exposure and gain status into the image metadata */
+	metadata_.set("device.status", deviceStatus);
 
-	if (agcAlgo_->updateControls())
-		setControls(frame);
+	/* Calculate the new shutter speed and analogue gain */
+	agcAlgo_->process(stats, &metadata_);
+
+	/* Get back the values from the image metadata updated */
+	struct AgcStatus agcStatus;
+	if (metadata_.get("agc.status", agcStatus) == 0) {
+		gain_ = camHelper_->gainCode(agcStatus.analogueGain);
+		Duration exposure = agcStatus.shutterTime;
+		exposure_ = exposure / lineDuration_;
+	}
+
+	/* Calculate the AWB gains */
+	awbAlgo_->process(stats, &metadata_);
+
+	/* Update the exposure and gains on sensor side */
+	setControls(frame);
 
 	/* \todo Use VBlank value calculated from each frame exposure. */
 	int64_t frameDuration = sensorInfo_.lineLength * (defVBlank_ + sensorInfo_.outputSize.height) /
