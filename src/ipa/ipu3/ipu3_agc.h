@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
+ * Based on the implementation from the Raspberry Pi IPA,
+ * Copyright (C) 2019-2021, Raspberry Pi (Trading) Ltd.
  * Copyright (C) 2021, Ideas On Board
  *
  * ipu3_agc.h - IPU3 AGC/AEC control algorithm
