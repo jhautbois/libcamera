@@ -25,6 +25,7 @@
 #include "ipu3_agc.h"
 #include "ipu3_awb.h"
 #include "libipa/camera_sensor_helper.h"
+#include "libipa/metadata.h"
 
 static constexpr uint32_t kMaxCellWidthPerSet = 160;
 static constexpr uint32_t kMaxCellHeightPerSet = 56;
