@@ -1325,16 +1325,6 @@ void IPU3CameraData::cio2BufferReady(FrameBuffer *buffer)
 	request->metadata().set(controls::SensorTimestamp,
 				buffer->metadata().timestamp);
 
-	static uint64_t lastFrameTimestamp = 0;
-
-	double fps = buffer->metadata().timestamp - lastFrameTimestamp;
-	fps = lastFrameTimestamp != 0 && fps ? 1000000000.0 / fps : 0.0;
-	lastFrameTimestamp = buffer->metadata().timestamp;
-
-	LOG(IPU3, Info)
-		<< "CIO2 Complete: Frame " << buffer->metadata().sequence
-		<< ": fps " << fps;
-
 	/* If the buffer is cancelled force a complete of the whole request. */
 	if (buffer->metadata().status == FrameMetadata::FrameCancelled) {
 		for (auto it : request->buffers()) {
