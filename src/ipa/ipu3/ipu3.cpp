@@ -24,6 +24,8 @@
 
 #include "ipu3_agc.h"
 #include "ipu3_awb.h"
+#include "ipu3_common.h"
+
 #include "libipa/camera_sensor_helper.h"
 #include "libipa/metadata.h"
 
@@ -34,7 +36,23 @@ namespace libcamera {
 
 LOG_DEFINE_CATEGORY(IPAIPU3)
 
+using namespace std::literals::chrono_literals;
+
 namespace ipa::ipu3 {
+
+/**
+ * \struct Ipu3DeviceStatus
+ * \brief Device metadata structure
+ *
+ * The Ipu3DeviceStatus structure is intended to store things like shutter time
+ * and analogue gain that downstream control algorithms will want to know.
+ *
+ * \var Ipu3DeviceStatus::shutterSpeed
+ * \brief Shutter time in microseconds
+ *
+ * \var Ipu3DeviceStatus::analogueGain
+ * \brief Analogue gain
+ */
 
 class IPAIPU3 : public IPAIPU3Interface
 {
@@ -68,11 +86,8 @@ private:
 	/* Camera sensor controls. */
 	uint32_t defVBlank_;
 	uint32_t exposure_;
-	uint32_t minExposure_;
-	uint32_t maxExposure_;
 	uint32_t gain_;
-	uint32_t minGain_;
-	uint32_t maxGain_;
+	Duration lineDuration_;
 
 	/* Interface to the AWB algorithm */
 	std::unique_ptr<IPU3Awb> awbAlgo_;
@@ -126,12 +141,16 @@ void IPAIPU3::calculateBdsGrid(const Size &bdsOutputSize)
 	bdsGrid_ = {};
 
 	for (uint32_t widthShift = 3; widthShift <= 7; ++widthShift) {
-		uint32_t width = std::min(kMaxCellWidthPerSet,
-					  bdsOutputSize.width >> widthShift);
+		uint32_t width = std::clamp(bdsOutputSize.width >> widthShift,
+					    2 * kAwbStatsSizeX,
+					    kMaxCellWidthPerSet);
+
 		width = width << widthShift;
 		for (uint32_t heightShift = 3; heightShift <= 7; ++heightShift) {
-			int32_t height = std::min(kMaxCellHeightPerSet,
-						  bdsOutputSize.height >> heightShift);
+			uint32_t height = std::clamp(bdsOutputSize.height >> heightShift,
+						     2 * kAwbStatsSizeY,
+						     kMaxCellHeightPerSet);
+
 			height = height << heightShift;
 			uint32_t error  = std::abs(static_cast<int>(width - bdsOutputSize.width))
 							+ std::abs(static_cast<int>(height - bdsOutputSize.height));
@@ -186,13 +205,10 @@ int IPAIPU3::configure(const IPAConfigInfo &configInfo)
 		return -EINVAL;
 	}
 
-	minExposure_ = std::max(itExp->second.min().get<int32_t>(), 1);
-	maxExposure_ = itExp->second.max().get<int32_t>();
-	exposure_ = minExposure_;
+	exposure_ = itExp->second.def().get<int32_t>();
+	lineDuration_ = configInfo.sensorInfo.lineLength * 1.0s / configInfo.sensorInfo.pixelRate;
 
-	minGain_ = std::max(itGain->second.min().get<int32_t>(), 1);
-	maxGain_ = itGain->second.max().get<int32_t>();
-	gain_ = minGain_;
+	gain_ = itGain->second.def().get<int32_t>();
 
 	defVBlank_ = itVBlank->second.def().get<int32_t>();
 
@@ -204,7 +220,7 @@ int IPAIPU3::configure(const IPAConfigInfo &configInfo)
 	awbAlgo_->initialise(params_, configInfo.bdsOutputSize, bdsGrid_);
 
 	agcAlgo_ = std::make_unique<IPU3Agc>();
-	agcAlgo_->initialise(bdsGrid_, sensorInfo_);
+	agcAlgo_->initialise(bdsGrid_, configInfo);
 
 	return 0;
 }
@@ -293,11 +309,27 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 			      [[maybe_unused]] int64_t frameTimestamp,
 			      [[maybe_unused]] const ipu3_uapi_stats_3a *stats)
 {
+	Ipu3DeviceStatus deviceStatus = {};
+
 	ControlList ctrls(controls::controls);
 
-	double gain = camHelper_->gain(gain_);
-	agcAlgo_->process(stats, exposure_, gain);
-	gain_ = camHelper_->gainCode(gain);
+	/* Calculate the shutter speed in microseconds and analogue gain */
+	deviceStatus.shutterSpeed = exposure_ * lineDuration_;
+	deviceStatus.analogueGain = camHelper_->gain(gain_);
+
+	/* Set the current exposure and gain status into the image metadata */
+	metadata_.set("device.status", deviceStatus);
+
+	/* Calculate the new shutter speed and analogue gain */
+	agcAlgo_->process(stats, &metadata_);
+
+	/* Get back the values from the image metadata updated */
+	struct AgcStatus agcStatus;
+	if (metadata_.get("agc.status", agcStatus) == 0) {
+		gain_ = camHelper_->gainCode(agcStatus.analogueGain);
+		Duration exposure = agcStatus.shutterTime;
+		exposure_ = exposure / lineDuration_;
+	}
 
 	/* Calculate the AWB gains */
 	awbAlgo_->process(stats, &metadata_);
