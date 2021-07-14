@@ -68,6 +68,11 @@ static constexpr uint32_t kMinGreenLevelInZone = 32;
  * \struct Ipu3AwbCell
  * \brief Memory layout for each cell in AWB metadata
  *
+ * This is the internal layout on IPU3 for one cell of AWB statistics.
+ * There is ipu3_uapi_awb_config_s->grid.width * 2^block_width_log2 per
+ * ipu3_uapi_awb_config_s->grid.height * 2^block_height_log2 cells for
+ * one frame statistics.
+ *
  * The Ipu3AwbCell structure is used to get individual values
  * such as red average or saturation ratio in a particular cell.
  *
@@ -84,7 +89,14 @@ static constexpr uint32_t kMinGreenLevelInZone = 32;
  * \brief Green average for blue lines
  *
  * \var Ipu3AwbCell::satRatio
- * \brief Saturation ratio in the cell
+ * \brief Saturation ratio in the cell.
+ *
+ * The saturation ratio is determined based upon the threshold values set
+ * in rgbs_thr_*, and will be set if the threshold value has the corresponding
+ * enable bit set in the \a rgbs_thr_b member of \a ipu3_uapi_awb_config_s.
+ *
+ * For example, to obtain the Blue saturation value, the
+ * IPU3_UAPI_AWB_RGBS_THR_B_INCL_SAT bit must be set in rgbs_thr_b.
  *
  * \var Ipu3AwbCell::padding
  * \brief array of unused bytes for padding
@@ -269,7 +281,7 @@ void IPU3Awb::generateAwbStats(const ipu3_uapi_stats_3a *stats)
 			uint32_t cellY = ((cellPosition / awbGrid_.width) / regionHeight) % kAwbStatsSizeY;
 
 			uint32_t awbRegionPosition = cellY * kAwbStatsSizeX + cellX;
-			cellPosition *= 8;
+			cellPosition *= sizeof(Ipu3AwbCell);
 
 			/* Cast the initial IPU3 structure to simplify the reading */
 			Ipu3AwbCell *currentCell = reinterpret_cast<Ipu3AwbCell *>(const_cast<uint8_t *>(&stats->awb_raw_buffer.meta_data[cellPosition]));
