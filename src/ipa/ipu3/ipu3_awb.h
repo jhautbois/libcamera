@@ -14,6 +14,7 @@
 #include <libcamera/geometry.h>
 
 #include "libipa/algorithm.h"
+#include "libipa/metadata.h"
 
 namespace libcamera {
 
@@ -30,8 +31,8 @@ public:
 	~IPU3Awb();
 
 	void initialise(ipu3_uapi_params &params, const Size &bdsOutputSize, struct ipu3_uapi_grid_config &bdsGrid);
-	void calculateWBGains(const ipu3_uapi_stats_3a *stats);
-	void updateWbParameters(ipu3_uapi_params &params, double agcGamma);
+	void process(const ipu3_uapi_stats_3a *stats, Metadata *imageMetadata);
+	void updateWbParameters(ipu3_uapi_params &params, Metadata *imageMetadata);
 
 	struct Ipu3AwbCell {
 		unsigned char greenRedAvg;
@@ -77,6 +78,7 @@ private:
 	void clearAwbStats();
 	void awbGreyWorld();
 	uint32_t estimateCCT(double red, double green, double blue);
+	void calculateWBGains(const ipu3_uapi_stats_3a *stats);
 
 	struct ipu3_uapi_grid_config awbGrid_;
 

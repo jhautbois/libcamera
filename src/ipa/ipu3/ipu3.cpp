@@ -80,6 +80,8 @@ private:
 	std::unique_ptr<IPU3Agc> agcAlgo_;
 	/* Interface to the Camera Helper */
 	std::unique_ptr<CameraSensorHelper> camHelper_;
+	/* Metadata storage */
+	Metadata metadata_;
 
 	/* Local parameter storage */
 	struct ipu3_uapi_params params_;
@@ -277,7 +279,7 @@ void IPAIPU3::processControls([[maybe_unused]] unsigned int frame,
 void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params)
 {
 	if (agcAlgo_->updateControls())
-		awbAlgo_->updateWbParameters(params_, agcAlgo_->gamma());
+		awbAlgo_->updateWbParameters(params_, &metadata_);
 
 	*params = params_;
 
@@ -297,7 +299,8 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 	agcAlgo_->process(stats, exposure_, gain);
 	gain_ = camHelper_->gainCode(gain);
 
-	awbAlgo_->calculateWBGains(stats);
+	/* Calculate the AWB gains */
+	awbAlgo_->process(stats, &metadata_);
 
 	if (agcAlgo_->updateControls())
 		setControls(frame);
