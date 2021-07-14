@@ -18,50 +18,79 @@ namespace ipa::ipu3 {
 
 LOG_DEFINE_CATEGORY(IPU3Awb)
 
-static constexpr uint32_t kMinZonesCounted = 16;
-static constexpr uint32_t kMinGreenLevelInZone = 32;
+/**
+ * The Grey World algorithm assumes that the scene, in average, is neutral grey.
+ * Reference: Lam, Edmund & Fung, George. (2008). Automatic White Balancing in
+ * Digital Photography. 10.1201/9781420054538.ch10.
+ *
+ * The IPU3 generates statistics from the Bayer Down Scaler output into a grid
+ * defined in the ipu3_uapi_awb_config_s structure.
+ *
+ * For example, when the BDS outputs a frame of 2592x1944, the grid may be
+ * configured to 81x30 cells each with a size of 32x64 pixels.
+ * We then have an average of 2048 R, G and B pixels per cell.
+ *
+ * The AWB algorithm uses a fixed grid size of kAwbStatsSizeX x kAwbStatsSizeY.
+ * Each of this new grid cell will be called a zone.
+ *
+ * Before calculating the gains, we will convert the statistics from the BDS
+ * grid to an internal grid configuration in generateAwbStats.
+ * As part of converting the statistics to an internal grid, the saturation
+ * flag from the originating grid cell is used to decide if the zone contains
+ * saturated pixels or not, making the zone relevant or not.
+ * A saturated zone will be excluded from the calculation.
+ *
+ * The Grey World algorithm will then estimate the red and blue gains to apply, and
+ * store the results in the metadata.
+ */
 
 /**
- * \struct IspStatsRegion
+ * \struct StatsRegion
  * \brief RGB statistics for a given region
  *
- * The IspStatsRegion structure is intended to abstract the ISP specific
- * statistics and use an agnostic algorithm to compute AWB.
+ * The StatsRegions structure abstracts the ISP specific statistics to compute
+ * AWB. The Grey World algorithm uses an average of the pixels in a given
+ * region. When a specific zone in the scene is saturated, we want to exclude
+ * it from the calculation, and consider it as an outlier.
  *
- * \var IspStatsRegion::counted
- * \brief Number of pixels used to calculate the sums
+ * \var StatsRegion::counted
+ * \brief Number of unsaturated pixels used to calculate the sums
  *
- * \var IspStatsRegion::uncounted
- * \brief Remaining number of pixels in the region
+ * \var StatsRegion::uncounted
+ * \brief Remaining number of pixels in the region (ie saturated)
  *
- * \var IspStatsRegion::rSum
+ * \var StatsRegion::rSum
  * \brief Sum of the red values in the region
  *
- * \var IspStatsRegion::gSum
+ * \var StatsRegion::gSum
  * \brief Sum of the green values in the region
  *
- * \var IspStatsRegion::bSum
+ * \var StatsRegion::bSum
  * \brief Sum of the blue values in the region
  */
 
 /**
- * \struct AwbStatus
+ * \struct AwbResults
  * \brief AWB parameters calculated
  *
- * The AwbStatus structure is intended to store the AWB
- * parameters calculated by the algorithm
+ * The AwbResults structure stores the AWB parameters calculated by the
+ * algorithm. This structure is shared through the metadata object with
+ * the key 'awb.results' for other algorithms usage.
  *
- * \var AwbStatus::temperatureK
- * \brief Color temperature calculated
+ * \var AwbResults::temperatureK
+ * \brief Color temperature calculated, in Kelvin
  *
- * \var AwbStatus::redGain
- * \brief Gain calculated for the red channel
+ * \var AwbResults::redGain
+ * \brief Gain calculated for the red channel. This is a floating-point
+ * value used as a multiplier on the ISP side
  *
- * \var AwbStatus::greenGain
- * \brief Gain calculated for the green channel
+ * \var AwbResults::greenGain
+ * \brief Gain calculated for the green channel. This is a floating-point
+ * value used as a multiplier on the ISP side
  *
- * \var AwbStatus::blueGain
- * \brief Gain calculated for the blue channel
+ * \var AwbResults::blueGain
+ * \brief Gain calculated for the blue channel. This is a floating-point
+ * value used as a multiplier on the ISP side
  */
 
 /**
@@ -171,6 +200,9 @@ const struct ipu3_uapi_gamma_corr_lut imguCssGammaLut = { {
 	7807, 7871, 7935, 7999, 8063, 8127, 8191
 } };
 
+/* Minimum level of green in a given zone */
+static constexpr uint32_t kMinGreenLevelInZone = 16;
+
 IPU3Awb::IPU3Awb()
 	: Algorithm()
 {
@@ -178,6 +210,7 @@ IPU3Awb::IPU3Awb()
 	asyncResults_.greenGain = 1.0;
 	asyncResults_.redGain = 1.0;
 	asyncResults_.temperatureK = 4500;
+	minZonesCounted_ = 0;
 }
 
 IPU3Awb::~IPU3Awb()
@@ -214,7 +247,7 @@ void IPU3Awb::initialise(ipu3_uapi_params &params, const Size &bdsOutputSize, st
 	params.acc_param.gamma.gc_lut = imguCssGammaLut;
 	params.acc_param.gamma.gc_ctrl.enable = 1;
 
-	zones_.reserve(kAwbStatsSizeX * kAwbStatsSizeY);
+	zones_.reserve(kAwbStatsSize);
 }
 
 /**
@@ -250,10 +283,10 @@ uint32_t IPU3Awb::estimateCCT(double red, double green, double blue)
 /* Generate an RGB vector with the average values for each region */
 void IPU3Awb::generateZones(std::vector<RGB> &zones)
 {
-	for (unsigned int i = 0; i < kAwbStatsSizeX * kAwbStatsSizeY; i++) {
+	for (unsigned int i = 0; i < kAwbStatsSize; i++) {
 		RGB zone;
 		double counted = awbStats_[i].counted;
-		if (counted >= kMinZonesCounted) {
+		if (counted >= minZonesCounted_) {
 			zone.G = awbStats_[i].gSum / counted;
 			if (zone.G >= kMinGreenLevelInZone) {
 				zone.R = awbStats_[i].rSum / counted;
@@ -270,6 +303,11 @@ void IPU3Awb::generateAwbStats(const ipu3_uapi_stats_3a *stats)
 	uint32_t regionWidth = round(awbGrid_.width / static_cast<double>(kAwbStatsSizeX));
 	uint32_t regionHeight = round(awbGrid_.height / static_cast<double>(kAwbStatsSizeY));
 
+	/*
+	 * It is the minimum proportion of pixels counted within AWB region
+	 * for it to be relevant.
+	 */
+	minZonesCounted_ = ((regionWidth * regionHeight) * 4) / 5;
 	/*
 	 * Generate a (kAwbStatsSizeX x kAwbStatsSizeY) array from the IPU3 grid which is
 	 * (awbGrid_.width x awbGrid_.height).
@@ -299,7 +337,7 @@ void IPU3Awb::generateAwbStats(const ipu3_uapi_stats_3a *stats)
 
 void IPU3Awb::clearAwbStats()
 {
-	for (unsigned int i = 0; i < kAwbStatsSizeX * kAwbStatsSizeY; i++) {
+	for (unsigned int i = 0; i < kAwbStatsSize; i++) {
 		awbStats_[i].bSum = 0;
 		awbStats_[i].rSum = 0;
 		awbStats_[i].gSum = 0;
@@ -356,7 +394,12 @@ void IPU3Awb::calculateWBGains(const ipu3_uapi_stats_3a *stats)
 	generateAwbStats(stats);
 	generateZones(zones_);
 	LOG(IPU3Awb, Debug) << "Valid zones: " << zones_.size();
-	if (zones_.size() > 10) {
+
+	/*
+	 * We need at least 5% of valid zones to estimate the gain correction.
+	 * Having a bigger minimum would make the algorithm slower.
+	 */
+	if (zones_.size() > kAwbStatsSize / 20) {
 		awbGreyWorld();
 		LOG(IPU3Awb, Debug) << "Gain found for red: " << asyncResults_.redGain
 				    << " and for blue: " << asyncResults_.blueGain;
@@ -367,7 +410,7 @@ void IPU3Awb::process(const ipu3_uapi_stats_3a *stats, Metadata *imageMetadata)
 {
 	calculateWBGains(stats);
 	/* We need to update the AWB status, to give back the gains */
-	imageMetadata->set("awb.status", asyncResults_);
+	imageMetadata->set("awb.results", asyncResults_);
 }
 
 void IPU3Awb::updateWbParameters(ipu3_uapi_params &params, Metadata *imageMetadata)
@@ -375,12 +418,12 @@ void IPU3Awb::updateWbParameters(ipu3_uapi_params &params, Metadata *imageMetada
 	/*
 	 * Green gains should not be touched and considered 1.
 	 * Default is 16, so do not change it at all.
-	 * 4096 is the value for a gain of 1.0
+	 * 8192 is the value for a gain of 1.0
 	 */
-	params.acc_param.bnr.wb_gains.gr = 16;
-	params.acc_param.bnr.wb_gains.r = 4096 * asyncResults_.redGain;
-	params.acc_param.bnr.wb_gains.b = 4096 * asyncResults_.blueGain;
-	params.acc_param.bnr.wb_gains.gb = 16;
+	params.acc_param.bnr.wb_gains.gr = 8192;
+	params.acc_param.bnr.wb_gains.r = 8192 * asyncResults_.redGain;
+	params.acc_param.bnr.wb_gains.b = 8192 * asyncResults_.blueGain;
+	params.acc_param.bnr.wb_gains.gb = 8192;
 
 	/* When the AGC algorithm has run, it may have set a new gamma */
 	double agcGamma = 1.0;
