@@ -20,9 +20,12 @@ namespace libcamera {
 
 namespace ipa::ipu3 {
 
-/* Region size for the statistics generation algorithm */
+/* Width of the AWB regions used for Grey World calculation */
 static constexpr uint32_t kAwbStatsSizeX = 16;
+/* Height of the AWB regions used for Grey World calculation */
 static constexpr uint32_t kAwbStatsSizeY = 12;
+/* Total size of the AWB regions used for Grey World calculation */
+static constexpr uint32_t kAwbStatsSize = kAwbStatsSizeX * kAwbStatsSizeY;
 
 class IPU3Awb : public Algorithm
 {
@@ -57,7 +60,7 @@ public:
 		}
 	};
 
-	struct IspStatsRegion {
+	struct StatsRegion {
 		unsigned int counted;
 		unsigned int uncounted;
 		unsigned long long rSum;
@@ -65,7 +68,7 @@ public:
 		unsigned long long bSum;
 	};
 
-	struct AwbStatus {
+	struct AwbResults {
 		double temperatureK;
 		double redGain;
 		double greenGain;
@@ -83,8 +86,9 @@ private:
 	struct ipu3_uapi_grid_config awbGrid_;
 
 	std::vector<RGB> zones_;
-	IspStatsRegion awbStats_[kAwbStatsSizeX * kAwbStatsSizeY];
-	AwbStatus asyncResults_;
+	StatsRegion awbStats_[kAwbStatsSize];
+	AwbResults asyncResults_;
+	uint32_t minZonesCounted_;
 };
 
 } /* namespace ipa::ipu3 */

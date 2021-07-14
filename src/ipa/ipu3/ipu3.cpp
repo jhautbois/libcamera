@@ -302,6 +302,7 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 	/* Calculate the AWB gains */
 	awbAlgo_->process(stats, &metadata_);
 
+	/* Update the exposure and gains on sensor side */
 	if (agcAlgo_->updateControls())
 		setControls(frame);
 
