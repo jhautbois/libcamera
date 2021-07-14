@@ -41,7 +41,7 @@ public:
 		unsigned char greenBlueAvg;
 		unsigned char satRatio;
 		unsigned char padding[3];
-	} __attribute__((packed));
+	};
 
 	/* \todo Make these three structs available to all the ISPs ? */
 	struct RGB {
