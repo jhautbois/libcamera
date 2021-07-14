@@ -80,7 +80,7 @@ private:
 	std::unique_ptr<IPU3Agc> agcAlgo_;
 	/* Interface to the Camera Helper */
 	std::unique_ptr<CameraSensorHelper> camHelper_;
-	/* Metadata storage */
+	/* Key/value pairs for algorithms to share results and context */
 	Metadata metadata_;
 
 	/* Local parameter storage */
