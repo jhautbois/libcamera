@@ -351,7 +351,14 @@ void IPU3Awb::calculateWBGains(const ipu3_uapi_stats_3a *stats)
 	}
 }
 
-void IPU3Awb::updateWbParameters(ipu3_uapi_params &params, double agcGamma)
+void IPU3Awb::process(const ipu3_uapi_stats_3a *stats, Metadata *imageMetadata)
+{
+	calculateWBGains(stats);
+	/* We need to update the AWB status, to give back the gains */
+	imageMetadata->set("awb.status", asyncResults_);
+}
+
+void IPU3Awb::updateWbParameters(ipu3_uapi_params &params, Metadata *imageMetadata)
 {
 	/*
 	 * Green gains should not be touched and considered 1.
@@ -362,6 +369,11 @@ void IPU3Awb::updateWbParameters(ipu3_uapi_params &params, double agcGamma)
 	params.acc_param.bnr.wb_gains.r = 4096 * asyncResults_.redGain;
 	params.acc_param.bnr.wb_gains.b = 4096 * asyncResults_.blueGain;
 	params.acc_param.bnr.wb_gains.gb = 16;
+
+	/* When the AGC algorithm has run, it may have set a new gamma */
+	double agcGamma = 1.0;
+	if (imageMetadata->get("agc.gamma", agcGamma) != 0)
+		LOG(IPU3Awb, Debug) << "Awb: no gamma found, defaulted to 1.0";
 
 	LOG(IPU3Awb, Debug) << "Color temperature estimated: " << asyncResults_.temperatureK
 			    << " and gamma calculated: " << agcGamma;
