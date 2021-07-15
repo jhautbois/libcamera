@@ -7,6 +7,8 @@
 
 #include "libcamera/internal/ipa_data_serializer.h"
 
+#include <unistd.h>
+
 #include <libcamera/base/log.h>
 
 /**
@@ -547,7 +549,14 @@ FileDescriptor IPADataSerializer<FileDescriptor>::deserialize(std::vector<uint8_
 
 	ASSERT(!(valid && std::distance(fdsBegin, fdsEnd) < 1));
 
-	return valid ? FileDescriptor(*fdsBegin) : FileDescriptor();
+	FileDescriptor fd = valid ? FileDescriptor(*fdsBegin) : FileDescriptor();
+	if (valid && *fdsBegin != -1) {
+		LOG(IPADataSerializer, Error) << "We probably leaked an fd";
+		close(*fdsBegin);
+		//fdsBegin = -1; /// Can't do this on the const iterator.
+	}
+
+	return fd;
 }
 
 template<>
