@@ -410,7 +410,7 @@ void IPU3Awb::process(const ipu3_uapi_stats_3a *stats, Metadata *imageMetadata)
 {
 	calculateWBGains(stats);
 	/* We need to update the AWB status, to give back the gains */
-	imageMetadata->set(tagAwbStatus, asyncResults_);
+	imageMetadata->set(tagAwbResults, asyncResults_);
 }
 
 void IPU3Awb::updateWbParameters(ipu3_uapi_params &params, Metadata *imageMetadata)

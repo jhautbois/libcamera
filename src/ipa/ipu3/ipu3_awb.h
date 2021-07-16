@@ -76,7 +76,7 @@ public:
 	};
 
 	/* List of all Metadata tags */
-	static constexpr Tag<AwbResults> tagAwbStatus{ "awb.results" };
+	static constexpr Tag<AwbResults> tagAwbResults{ "awb.results" };
 	static constexpr Tag<double> tagGamma{ "agc.gamma" };
 
 private:
