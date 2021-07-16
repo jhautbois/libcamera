@@ -75,6 +75,10 @@ public:
 		double blueGain;
 	};
 
+	/* List of all Metadata tags */
+	static constexpr Tag<AwbResults> tagAwbStatus{ "awb.results" };
+	static constexpr Tag<double> tagGamma{ "agc.gamma" };
+
 private:
 	void generateZones(std::vector<RGB> &zones);
 	void generateAwbStats(const ipu3_uapi_stats_3a *stats);

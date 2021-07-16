@@ -19,6 +19,11 @@ namespace libcamera {
 
 namespace ipa {
 
+template<typename T>
+struct Tag {
+	const char *tag_;
+};
+
 class Metadata
 {
 public:
@@ -42,17 +47,17 @@ public:
 	Metadata &operator=(Metadata &&other) = delete;
 
 	template<typename T>
-	void set(std::string const &tag, T const &value)
+	void set(const Tag<T> &tag, T const &value)
 	{
 		std::scoped_lock lock(mutex_);
-		data_[tag] = value;
+		data_[tag.tag_] = value;
 	}
 
 	template<typename T>
-	int get(std::string const &tag, T &value) const
+	int get(const Tag<T> &tag, T &value) const
 	{
 		std::scoped_lock lock(mutex_);
-		auto it = data_.find(tag);
+		auto it = data_.find(tag.tag_);
 		if (it == data_.end())
 			return -1;
 		value = std::any_cast<T>(it->second);
@@ -72,18 +77,18 @@ public:
 	}
 
 	template<typename T>
-	T *getLocked(std::string const &tag)
+	T *getLocked(const Tag<T> &tag)
 	{
-		auto it = data_.find(tag);
+		auto it = data_.find(tag.tag_);
 		if (it == data_.end())
 			return nullptr;
 		return std::any_cast<T>(&it->second);
 	}
 
 	template<typename T>
-	void setLocked(std::string const &tag, T const &value)
+	void setLocked(const Tag<T> &tag, T const &value)
 	{
-		data_[tag] = value;
+		data_[tag.tag_] = value;
 	}
 
 	void lock() { mutex_.lock(); }
@@ -91,7 +96,7 @@ public:
 
 private:
 	mutable std::mutex mutex_;
-	std::map<std::string, std::any> data_;
+	std::map<const char *, std::any> data_;
 };
 
 } /* namespace ipa */
