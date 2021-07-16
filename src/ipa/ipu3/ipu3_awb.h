@@ -27,6 +27,47 @@ static constexpr uint32_t kAwbStatsSizeY = 12;
 /* Total size of the AWB regions used for Grey World calculation */
 static constexpr uint32_t kAwbStatsSize = kAwbStatsSizeX * kAwbStatsSizeY;
 
+struct Ipu3AwbCell {
+	unsigned char greenRedAvg;
+	unsigned char redAvg;
+	unsigned char blueAvg;
+	unsigned char greenBlueAvg;
+	unsigned char satRatio;
+	unsigned char padding[3];
+};
+
+/* \todo Make these three structs available to all the ISPs ? */
+struct RGB {
+	RGB(double _R = 0, double _G = 0, double _B = 0)
+		: R(_R), G(_G), B(_B)
+	{
+	}
+	double R, G, B;
+	RGB &operator+=(RGB const &other)
+	{
+		R += other.R, G += other.G, B += other.B;
+		return *this;
+	}
+};
+
+struct StatsRegion {
+	unsigned int counted;
+	unsigned int uncounted;
+	unsigned long long rSum;
+	unsigned long long gSum;
+	unsigned long long bSum;
+};
+
+struct AwbResults {
+	double temperatureK;
+	double redGain;
+	double greenGain;
+	double blueGain;
+};
+
+/* List of all Metadata tags for AWB */
+static constexpr Tag<AwbResults> tagAwbResults{ "awb.results" };
+
 class IPU3Awb : public Algorithm
 {
 public:
@@ -36,48 +77,6 @@ public:
 	void initialise(ipu3_uapi_params &params, const Size &bdsOutputSize, struct ipu3_uapi_grid_config &bdsGrid);
 	void process(const ipu3_uapi_stats_3a *stats, Metadata *imageMetadata);
 	void updateWbParameters(ipu3_uapi_params &params, Metadata *imageMetadata);
-
-	struct Ipu3AwbCell {
-		unsigned char greenRedAvg;
-		unsigned char redAvg;
-		unsigned char blueAvg;
-		unsigned char greenBlueAvg;
-		unsigned char satRatio;
-		unsigned char padding[3];
-	};
-
-	/* \todo Make these three structs available to all the ISPs ? */
-	struct RGB {
-		RGB(double _R = 0, double _G = 0, double _B = 0)
-			: R(_R), G(_G), B(_B)
-		{
-		}
-		double R, G, B;
-		RGB &operator+=(RGB const &other)
-		{
-			R += other.R, G += other.G, B += other.B;
-			return *this;
-		}
-	};
-
-	struct StatsRegion {
-		unsigned int counted;
-		unsigned int uncounted;
-		unsigned long long rSum;
-		unsigned long long gSum;
-		unsigned long long bSum;
-	};
-
-	struct AwbResults {
-		double temperatureK;
-		double redGain;
-		double greenGain;
-		double blueGain;
-	};
-
-	/* List of all Metadata tags */
-	static constexpr Tag<AwbResults> tagAwbResults{ "awb.results" };
-	static constexpr Tag<double> tagGamma{ "agc.gamma" };
 
 private:
 	void generateZones(std::vector<RGB> &zones);

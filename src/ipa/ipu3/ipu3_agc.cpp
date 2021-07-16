@@ -8,7 +8,6 @@
  */
 
 #include "ipu3_agc.h"
-#include "ipu3_common.h"
 
 #include <algorithm>
 #include <cmath>
@@ -36,10 +35,31 @@ static constexpr uint32_t knumHistogramBins = 256;
 /* seems to be a 8-bit pipeline */
 static constexpr uint8_t kPipelineBits = 8;
 
+/* width of the AGC stats grid */
 static constexpr uint32_t kAgcStatsSizeX = 7;
+/* height of the AGC stats grid */
 static constexpr uint32_t kAgcStatsSizeY = 5;
-static constexpr uint32_t kAgcStatsSize = kAgcStatsSizeX * kAgcStatsSizeY + 1;
-static constexpr uint32_t kNumAgcWeightedZones = 15;
+/* size of the AGC stats grid */
+static constexpr uint32_t kAgcStatsSize = kAgcStatsSizeX * kAgcStatsSizeY;
+
+/*
+ * The AGC algorithm uses region-based metering.
+ * The image is divided up into regions as:
+ *
+ *	+--+--------------+--+
+ *	|11|     9        |12|
+ *	+--+--+--------+--+--+
+ *	|  |  |   3    |  |  |
+ *	|  |  +--+--+--+  |  |
+ *	|7 |5 |1 |0 |2 |6 |8 |
+ *	|  |  +--+--+--+  |  |
+ *	|  |  |   4    |  |  |
+ *	+--+--+--------+--+--+
+ *	|13|     10       |14|
+ *	+--+--------------+--+
+ * An average luminance value for the image is calculated according to:
+ * \f$Y = \frac{\sum_{i=0}^{i=kNumAgcWeightedZones}{kCenteredWeights_{i}Y_{i}}}{\sum_{i=0}^{i=kNumAgcWeightedZones}{w_{i}}}\f$
+ */
 static constexpr double kCenteredWeights[kNumAgcWeightedZones] = { 3, 3, 3, 2, 2, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0 };
 static constexpr uint32_t kAgcStatsRegions[kAgcStatsSize] = {
 	11, 9, 9, 9, 9, 9, 12,
@@ -50,16 +70,16 @@ static constexpr uint32_t kAgcStatsRegions[kAgcStatsSize] = {
 };
 
 /**
- * \struct AgcStatus
+ * \struct AgcResults
  * \brief AGC parameters calculated
  *
- * The AgcStatus structure is intended to store the AGC
+ * The AgcResults structure is intended to store the AGC
  * parameters calculated by the algorithm
  *
- * \var AgcStatus::shutterTime
+ * \var AgcResults::shutterTime
  * \brief Exposure time in microseconds
  *
- * \var AgcStatus::analogueGain
+ * \var AgcResults::analogueGain
  * \brief Analogue gain
  */
 
@@ -181,7 +201,7 @@ void IPU3Agc::filterExposure()
 	LOG(IPU3Agc, Debug) << "After filtering, total_exposure " << prevExposure_;
 }
 
-double IPU3Agc::computeInitialY(StatsRegion regions[], AwbStatus const &awb,
+double IPU3Agc::computeInitialY(StatsRegion regions[], AwbResults const &awb,
 				double weights[], double gain)
 {
 	/* Note how the calculation below means that equal weights give you
@@ -281,18 +301,18 @@ void IPU3Agc::computeGain(double &currentGain)
 
 void IPU3Agc::process(const ipu3_uapi_stats_3a *stats, Metadata *imageMetadata)
 {
-	Ipu3DeviceStatus deviceStatus;
+	AgcResults deviceStatus;
 	ASSERT(stats->stats_3a_status.awb_en);
 	clearStats();
 	generateStats(stats);
-	if (imageMetadata->get("device.status", deviceStatus) == 0) {
-		currentShutter_ = deviceStatus.shutterSpeed;
+	if (imageMetadata->get(tagAgcResults, deviceStatus) == 0) {
+		currentShutter_ = deviceStatus.shutterTime;
 		currentAnalogueGain_ = deviceStatus.analogueGain;
 	}
 	currentExposureNoDg_ = currentShutter_ * currentAnalogueGain_;
 
 	double currentGain = 1;
-	if (imageMetadata->get("awb.status", awb_) != 0)
+	if (imageMetadata->get(tagAwbResults, awb_) != 0)
 		LOG(IPU3Agc, Debug) << "Agc: no AWB status found";
 
 	computeGain(currentGain);
@@ -302,8 +322,8 @@ void IPU3Agc::process(const ipu3_uapi_stats_3a *stats, Metadata *imageMetadata)
 
 	status_.shutterTime = filteredShutter_;
 	status_.analogueGain = filteredAnalogueGain_;
-	imageMetadata->set("agc.status", status_);
-	imageMetadata->set("agc.gamma", gamma_);
+	imageMetadata->set(tagAgcResults, status_);
+	imageMetadata->set(tagGamma, gamma_);
 }
 
 } /* namespace ipa::ipu3 */

@@ -4,6 +4,7 @@
  *
  * ipu3_awb.cpp - AWB control algorithm
  */
+#include "ipu3_agc.h"
 #include "ipu3_awb.h"
 
 #include <cmath>

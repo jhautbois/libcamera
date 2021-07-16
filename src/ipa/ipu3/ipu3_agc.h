@@ -9,7 +9,7 @@
 #ifndef __LIBCAMERA_IPU3_AGC_H__
 #define __LIBCAMERA_IPU3_AGC_H__
 
-#include "ipu3_common.h"
+#include "ipu3_awb.h"
 
 #include <array>
 #include <unordered_map>
@@ -31,6 +31,18 @@ namespace ipa::ipu3 {
 
 using utils::Duration;
 
+struct AgcResults {
+	Duration shutterTime;
+	double analogueGain;
+};
+
+/* List of all Metadata tags for AGC*/
+static constexpr Tag<AgcResults> tagAgcResults{ "agc.results" };
+static constexpr Tag<double> tagGamma{ "agc.gamma" };
+
+/* Number of weighted zones for metering */
+static constexpr uint32_t kNumAgcWeightedZones = 15;
+
 class IPU3Agc : public Algorithm
 {
 public:
@@ -47,12 +59,12 @@ private:
 	void generateStats(const ipu3_uapi_stats_3a *stats);
 	void clearStats();
 	void generateZones(std::vector<RGB> &zones);
-	double computeInitialY(StatsRegion regions[], AwbStatus const &awb, double weights[], double gain);
+	double computeInitialY(StatsRegion regions[], AwbResults const &awb, double weights[], double gain);
 	void computeTargetExposure(double currentGain);
 	void divideUpExposure();
 	void computeGain(double &currentGain);
 
-	AwbStatus awb_;
+	AwbResults awb_;
 	double weights_[kNumAgcWeightedZones];
 	StatsRegion agcStats_[kNumAgcWeightedZones];
 
@@ -77,7 +89,7 @@ private:
 	double fixedAnalogueGain_;
 	double filteredAnalogueGain_;
 
-	AgcStatus status_;
+	AgcResults status_;
 };
 
 } /* namespace ipa::ipu3 */

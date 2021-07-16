@@ -24,7 +24,6 @@
 
 #include "ipu3_agc.h"
 #include "ipu3_awb.h"
-#include "ipu3_common.h"
 
 #include "libipa/camera_sensor_helper.h"
 #include "libipa/metadata.h"
@@ -294,8 +293,7 @@ void IPAIPU3::processControls([[maybe_unused]] unsigned int frame,
 
 void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params)
 {
-	if (agcAlgo_->updateControls())
-		awbAlgo_->updateWbParameters(params_, &metadata_);
+	awbAlgo_->updateWbParameters(params_, &metadata_);
 
 	*params = params_;
 
@@ -309,25 +307,25 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 			      [[maybe_unused]] int64_t frameTimestamp,
 			      [[maybe_unused]] const ipu3_uapi_stats_3a *stats)
 {
-	Ipu3DeviceStatus deviceStatus = {};
+	AgcResults deviceStatus = {};
 
 	ControlList ctrls(controls::controls);
 
 	/* Calculate the shutter speed in microseconds and analogue gain */
-	deviceStatus.shutterSpeed = exposure_ * lineDuration_;
+	deviceStatus.shutterTime = exposure_ * lineDuration_;
 	deviceStatus.analogueGain = camHelper_->gain(gain_);
 
 	/* Set the current exposure and gain status into the image metadata */
-	metadata_.set("device.status", deviceStatus);
+	metadata_.set(tagAgcResults, deviceStatus);
 
 	/* Calculate the new shutter speed and analogue gain */
 	agcAlgo_->process(stats, &metadata_);
 
 	/* Get back the values from the image metadata updated */
-	struct AgcStatus agcStatus;
-	if (metadata_.get("agc.status", agcStatus) == 0) {
-		gain_ = camHelper_->gainCode(agcStatus.analogueGain);
-		Duration exposure = agcStatus.shutterTime;
+	struct AgcResults agcResults;
+	if (metadata_.get(tagAgcResults, agcResults) == 0) {
+		gain_ = camHelper_->gainCode(agcResults.analogueGain);
+		Duration exposure = agcResults.shutterTime;
 		exposure_ = exposure / lineDuration_;
 	}
 
@@ -335,8 +333,7 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 	awbAlgo_->process(stats, &metadata_);
 
 	/* Update the exposure and gains on sensor side */
-	if (agcAlgo_->updateControls())
-		setControls(frame);
+	setControls(frame);
 
 	/* \todo Use VBlank value calculated from each frame exposure. */
 	int64_t frameDuration = sensorInfo_.lineLength * (defVBlank_ + sensorInfo_.outputSize.height) /
