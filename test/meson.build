@@ -24,6 +24,7 @@ subdir('v4l2_subdevice')
 subdir('v4l2_videodevice')
 
 public_tests = [
+    ['camera-manager',                  'camera-manager.cpp'],
     ['geometry',                        'geometry.cpp'],
     ['public-api',                      'public-api.cpp'],
     ['signal',                          'signal.cpp'],
