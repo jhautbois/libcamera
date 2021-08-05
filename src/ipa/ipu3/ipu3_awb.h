@@ -13,6 +13,7 @@
 
 #include <libcamera/geometry.h>
 
+#include "algorithms/algorithm.h"
 #include "libipa/algorithm.h"
 
 namespace libcamera {
@@ -23,7 +24,7 @@ namespace ipa::ipu3 {
 static constexpr uint32_t kAwbStatsSizeX = 16;
 static constexpr uint32_t kAwbStatsSizeY = 12;
 
-class IPU3Awb : public Algorithm
+class IPU3Awb : public ipa::Algorithm
 {
 public:
 	IPU3Awb();

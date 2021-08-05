@@ -22,6 +22,7 @@
 
 #include "libcamera/internal/framebuffer.h"
 
+#include "algorithms/algorithm.h"
 #include "ipa_context.h"
 
 #include "ipu3_agc.h"
@@ -53,6 +54,10 @@ public:
 private:
 	void processControls(unsigned int frame, const ControlList &controls);
 	void fillParams(unsigned int frame, ipu3_uapi_params *params);
+
+	int initialiseAlgorithms();
+	int configureAlgorithms();
+	void processAlgorithms(const ipu3_uapi_stats_3a *stats);
 	void parseStatistics(unsigned int frame,
 			     int64_t frameTimestamp,
 			     const ipu3_uapi_stats_3a *stats);
@@ -82,6 +87,9 @@ private:
 	/* Interface to the Camera Helper */
 	std::unique_ptr<CameraSensorHelper> camHelper_;
 
+	/* Maintain the algorithms used by the IPA */
+	std::list<std::unique_ptr<ipa::ipu3::Algorithm>> algorithms_;
+
 	/* Local parameter storage */
 	struct ipu3_uapi_grid_config bdsGrid_;
 	struct IPAContext context_;
@@ -97,6 +105,8 @@ int IPAIPU3::init(const IPASettings &settings)
 
 	/* Reset all the hardware settings */
 	context_.params = {};
+
+	initialiseAlgorithms();
 
 	return 0;
 }
@@ -199,6 +209,8 @@ int IPAIPU3::configure(const IPAConfigInfo &configInfo)
 
 	calculateBdsGrid(configInfo.bdsOutputSize);
 
+	configureAlgorithms();
+
 	awbAlgo_ = std::make_unique<IPU3Awb>();
 	awbAlgo_->initialise(context_.params, configInfo.bdsOutputSize, bdsGrid_);
 
@@ -278,7 +290,7 @@ void IPAIPU3::processControls([[maybe_unused]] unsigned int frame,
 void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params)
 {
 	if (agcAlgo_->updateControls())
-		awbAlgo_->updateWbParameters(context_.params, agcAlgo_->gamma());
+		awbAlgo_->updateWbParameters(context_.params);
 
 	*params = context_.params;
 
@@ -288,11 +300,46 @@ void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params)
 	queueFrameAction.emit(frame, op);
 }
 
+int IPAIPU3::initialiseAlgorithms()
+{
+	for (auto const &algo : algorithms_) {
+		int ret = algo->initialise(context_);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+int IPAIPU3::configureAlgorithms()
+{
+	for (auto const &algo : algorithms_) {
+		int ret = algo->configure(context_);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+void IPAIPU3::processAlgorithms(const ipu3_uapi_stats_3a *stats)
+{
+	/* It might be better to pass the stats in as a parameter to process() ? */
+	context_.stats = stats;
+
+	for (auto const &algo : algorithms_) {
+		algo->process(context_);
+	}
+}
+
 void IPAIPU3::parseStatistics(unsigned int frame,
 			      [[maybe_unused]] int64_t frameTimestamp,
 			      [[maybe_unused]] const ipu3_uapi_stats_3a *stats)
 {
 	ControlList ctrls(controls::controls);
+
+	/* Run the process for each algorithm on the stats */
+	processAlgorithms(stats);
 
 	double gain = camHelper_->gain(gain_);
 	agcAlgo_->process(stats, exposure_, gain);

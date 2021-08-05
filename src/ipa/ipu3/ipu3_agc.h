@@ -16,6 +16,7 @@
 
 #include <libcamera/geometry.h>
 
+#include "algorithms/algorithm.h"
 #include "libipa/algorithm.h"
 
 namespace libcamera {
@@ -26,7 +27,7 @@ namespace ipa::ipu3 {
 
 using utils::Duration;
 
-class IPU3Agc : public Algorithm
+class IPU3Agc : public ipa::Algorithm
 {
 public:
 	IPU3Agc();
