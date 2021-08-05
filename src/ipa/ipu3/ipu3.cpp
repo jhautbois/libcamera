@@ -22,6 +22,8 @@
 
 #include "libcamera/internal/framebuffer.h"
 
+#include "ipa_context.h"
+
 #include "ipu3_agc.h"
 #include "ipu3_awb.h"
 #include "libipa/camera_sensor_helper.h"
@@ -81,9 +83,8 @@ private:
 	std::unique_ptr<CameraSensorHelper> camHelper_;
 
 	/* Local parameter storage */
-	struct ipu3_uapi_params params_;
-
 	struct ipu3_uapi_grid_config bdsGrid_;
+	struct IPAContext context_;
 };
 
 int IPAIPU3::init(const IPASettings &settings)
@@ -93,6 +94,9 @@ int IPAIPU3::init(const IPASettings &settings)
 		LOG(IPAIPU3, Error) << "Failed to create camera sensor helper for " << settings.sensorModel;
 		return -ENODEV;
 	}
+
+	/* Reset all the hardware settings */
+	context_.params = {};
 
 	return 0;
 }
@@ -193,12 +197,10 @@ int IPAIPU3::configure(const IPAConfigInfo &configInfo)
 
 	defVBlank_ = itVBlank->second.def().get<int32_t>();
 
-	params_ = {};
-
 	calculateBdsGrid(configInfo.bdsOutputSize);
 
 	awbAlgo_ = std::make_unique<IPU3Awb>();
-	awbAlgo_->initialise(params_, configInfo.bdsOutputSize, bdsGrid_);
+	awbAlgo_->initialise(context_.params, configInfo.bdsOutputSize, bdsGrid_);
 
 	agcAlgo_ = std::make_unique<IPU3Agc>();
 	agcAlgo_->initialise(bdsGrid_, sensorInfo_);
@@ -276,9 +278,9 @@ void IPAIPU3::processControls([[maybe_unused]] unsigned int frame,
 void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params)
 {
 	if (agcAlgo_->updateControls())
-		awbAlgo_->updateWbParameters(params_, agcAlgo_->gamma());
+		awbAlgo_->updateWbParameters(context_.params, agcAlgo_->gamma());
 
-	*params = params_;
+	*params = context_.params;
 
 	IPU3Action op;
 	op.op = ActionParamFilled;
