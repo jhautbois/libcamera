@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: CC0-1.0
 
 ipu3_ipa_algorithms = files([
+    'awb.cpp',
     'contrast.cpp',
 ])

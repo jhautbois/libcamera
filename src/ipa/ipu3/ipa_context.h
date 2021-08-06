@@ -11,6 +11,8 @@
 
 #include <linux/intel-ipu3.h>
 
+#include <libcamera/geometry.h>
+
 namespace libcamera {
 
 namespace ipa::ipu3 {
@@ -21,6 +23,16 @@ struct IPAContext {
 
 	/* Output Parameters which will be written to the hardware */
 	ipu3_uapi_params params;
+
+	/* AWB specific parameters to share */
+	struct Awb {
+		struct Grid {
+			/* BDS grid plane config used by the kernel */
+			ipu3_uapi_grid_config bdsGrid;
+			/* BDS output size configured by the pipeline handler */
+			Size bdsOutputSize;
+		} grid;
+	} awb;
 };
 
 } /* namespace ipa::ipu3 */

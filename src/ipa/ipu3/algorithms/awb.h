@@ -2,10 +2,10 @@
 /*
  * Copyright (C) 2021, Ideas On Board
  *
- * ipu3_awb.h - IPU3 AWB control algorithm
+ * awb.h - IPU3 AWB control algorithm
  */
-#ifndef __LIBCAMERA_IPU3_AWB_H__
-#define __LIBCAMERA_IPU3_AWB_H__
+#ifndef __LIBCAMERA_IPU3_ALGORITHMS_AWB_H__
+#define __LIBCAMERA_IPU3_ALGORITHMS_AWB_H__
 
 #include <vector>
 
@@ -13,26 +13,24 @@
 
 #include <libcamera/geometry.h>
 
-#include "algorithms/algorithm.h"
-#include "libipa/algorithm.h"
+#include "algorithm.h"
 
 namespace libcamera {
 
-namespace ipa::ipu3 {
+namespace ipa::ipu3::algorithms {
 
 /* Region size for the statistics generation algorithm */
 static constexpr uint32_t kAwbStatsSizeX = 16;
 static constexpr uint32_t kAwbStatsSizeY = 12;
 
-class IPU3Awb : public ipa::Algorithm
+class Awb : public Algorithm
 {
 public:
-	IPU3Awb();
-	~IPU3Awb();
+	Awb();
+	~Awb();
 
-	void initialise(ipu3_uapi_params &params, const Size &bdsOutputSize, struct ipu3_uapi_grid_config &bdsGrid);
-	void calculateWBGains(const ipu3_uapi_stats_3a *stats);
-	void updateWbParameters(ipu3_uapi_params &params);
+	int configure(IPAContext &context) override;
+	void process(IPAContext &context) override;
 
 	struct Ipu3AwbCell {
 		unsigned char greenRedAvg;
@@ -73,6 +71,9 @@ public:
 	};
 
 private:
+	void calculateWBGains(const ipu3_uapi_stats_3a *stats);
+	void updateWbParameters(ipu3_uapi_params &params);
+
 	void generateZones(std::vector<RGB> &zones);
 	void generateAwbStats(const ipu3_uapi_stats_3a *stats);
 	void clearAwbStats();
@@ -86,7 +87,7 @@ private:
 	AwbStatus asyncResults_;
 };
 
-} /* namespace ipa::ipu3 */
+} /* namespace ipa::ipu3::algorithms */
 
 } /* namespace libcamera*/
-#endif /* __LIBCAMERA_IPU3_AWB_H__ */
+#endif /* __LIBCAMERA_IPU3_ALGORITHMS_AWB_H__ */

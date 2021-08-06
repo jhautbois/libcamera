@@ -23,11 +23,11 @@
 #include "libcamera/internal/framebuffer.h"
 
 #include "algorithms/algorithm.h"
+#include "algorithms/awb.h"
 #include "algorithms/contrast.h"
 #include "ipa_context.h"
 
 #include "ipu3_agc.h"
-#include "ipu3_awb.h"
 #include "libipa/camera_sensor_helper.h"
 
 static constexpr uint32_t kMaxCellWidthPerSet = 160;
@@ -81,8 +81,6 @@ private:
 	uint32_t minGain_;
 	uint32_t maxGain_;
 
-	/* Interface to the AWB algorithm */
-	std::unique_ptr<IPU3Awb> awbAlgo_;
 	/* Interface to the AEC/AGC algorithm */
 	std::unique_ptr<IPU3Agc> agcAlgo_;
 	/* Interface to the Camera Helper */
@@ -105,6 +103,7 @@ int IPAIPU3::init(const IPASettings &settings)
 	}
 
 	/* Construct our Algorithms */
+	algorithms_.emplace_back(new algorithms::Awb());
 	algorithms_.emplace_back(new algorithms::Contrast());
 
 	/* Reset all the hardware settings */
@@ -138,7 +137,7 @@ void IPAIPU3::calculateBdsGrid(const Size &bdsOutputSize)
 	uint32_t minError = std::numeric_limits<uint32_t>::max();
 	Size best;
 	Size bestLog2;
-	bdsGrid_ = {};
+	ipu3_uapi_grid_config &bdsGrid = context_.awb.grid.bdsGrid;
 
 	for (uint32_t widthShift = 3; widthShift <= 7; ++widthShift) {
 		uint32_t width = std::min(kMaxCellWidthPerSet,
@@ -162,14 +161,14 @@ void IPAIPU3::calculateBdsGrid(const Size &bdsOutputSize)
 		}
 	}
 
-	bdsGrid_.width = best.width >> bestLog2.width;
-	bdsGrid_.block_width_log2 = bestLog2.width;
-	bdsGrid_.height = best.height >> bestLog2.height;
-	bdsGrid_.block_height_log2 = bestLog2.height;
+	bdsGrid.width = best.width >> bestLog2.width;
+	bdsGrid.block_width_log2 = bestLog2.width;
+	bdsGrid.height = best.height >> bestLog2.height;
+	bdsGrid.block_height_log2 = bestLog2.height;
 
 	LOG(IPAIPU3, Debug) << "Best grid found is: ("
-			    << (int)bdsGrid_.width << " << " << (int)bdsGrid_.block_width_log2 << ") x ("
-			    << (int)bdsGrid_.height << " << " << (int)bdsGrid_.block_height_log2 << ")";
+			    << (int)bdsGrid.width << " << " << (int)bdsGrid.block_width_log2 << ") x ("
+			    << (int)bdsGrid.height << " << " << (int)bdsGrid.block_height_log2 << ")";
 }
 
 int IPAIPU3::configure(const IPAConfigInfo &configInfo)
@@ -211,13 +210,13 @@ int IPAIPU3::configure(const IPAConfigInfo &configInfo)
 
 	defVBlank_ = itVBlank->second.def().get<int32_t>();
 
+	/* Prepare AWB parameters */
 	calculateBdsGrid(configInfo.bdsOutputSize);
+	context_.awb.grid.bdsOutputSize = configInfo.bdsOutputSize;
 
 	configureAlgorithms();
 
-	awbAlgo_ = std::make_unique<IPU3Awb>();
-	awbAlgo_->initialise(context_.params, configInfo.bdsOutputSize, bdsGrid_);
-
+	bdsGrid_ = context_.awb.grid.bdsGrid;
 	agcAlgo_ = std::make_unique<IPU3Agc>();
 	agcAlgo_->initialise(bdsGrid_, sensorInfo_);
 
@@ -293,9 +292,6 @@ void IPAIPU3::processControls([[maybe_unused]] unsigned int frame,
 
 void IPAIPU3::fillParams(unsigned int frame, ipu3_uapi_params *params)
 {
-	if (agcAlgo_->updateControls())
-		awbAlgo_->updateWbParameters(context_.params);
-
 	*params = context_.params;
 
 	IPU3Action op;
@@ -348,8 +344,6 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 	double gain = camHelper_->gain(gain_);
 	agcAlgo_->process(stats, exposure_, gain);
 	gain_ = camHelper_->gainCode(gain);
-
-	awbAlgo_->calculateWBGains(stats);
 
 	if (agcAlgo_->updateControls())
 		setControls(frame);
