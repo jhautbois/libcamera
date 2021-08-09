@@ -23,6 +23,7 @@
 #include "libcamera/internal/framebuffer.h"
 
 #include "algorithms/algorithm.h"
+#include "algorithms/contrast.h"
 #include "ipa_context.h"
 
 #include "ipu3_agc.h"
@@ -102,6 +103,9 @@ int IPAIPU3::init(const IPASettings &settings)
 		LOG(IPAIPU3, Error) << "Failed to create camera sensor helper for " << settings.sensorModel;
 		return -ENODEV;
 	}
+
+	/* Construct our Algorithms */
+	algorithms_.emplace_back(new algorithms::Contrast());
 
 	/* Reset all the hardware settings */
 	context_.params = {};
