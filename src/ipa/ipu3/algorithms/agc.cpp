@@ -2,18 +2,17 @@
 /*
  * Copyright (C) 2021, Ideas On Board
  *
- * ipu3_agc.cpp - AGC/AEC control algorithm
+ * agc.cpp - AGC/AEC control algorithm
  */
 
-#include "ipu3_agc.h"
+#include "agc.h"
+
+#include <cmath>
 
 #include <algorithm>
-#include <cmath>
 #include <numeric>
 
 #include <libcamera/base/log.h>
-
-#include <libcamera/ipa/core_ipa_interface.h>
 
 #include "libipa/histogram.h"
 
@@ -21,7 +20,7 @@ namespace libcamera {
 
 using namespace std::literals::chrono_literals;
 
-namespace ipa::ipu3 {
+namespace ipa::ipu3::algorithms {
 
 LOG_DEFINE_CATEGORY(IPU3Agc)
 
@@ -36,8 +35,8 @@ static constexpr uint32_t kMaxISO = 1500;
 
 /* Maximum analogue gain value
  * \todo grab it from a camera helper */
-static constexpr uint32_t kMinGain = kMinISO / 100;
-static constexpr uint32_t kMaxGain = kMaxISO / 100;
+static constexpr double kMinGain = kMinISO / 100;
+static constexpr double kMaxGain = kMaxISO / 100;
 
 /* \todo use calculated value based on sensor */
 static constexpr uint32_t kMinExposure = 1;
@@ -50,24 +49,24 @@ static constexpr double kEvGainTarget = 0.5;
 /* A cell is 8 bytes and contains averages for RGB values and saturation ratio */
 static constexpr uint8_t kCellSize = 8;
 
-IPU3Agc::IPU3Agc()
+Agc::Agc()
 	: frameCount_(0), lastFrame_(0), converged_(false),
-	  updateControls_(false), iqMean_(0.0),
-	  lineDuration_(0s), maxExposureTime_(0s),
+	  updateControls_(false), iqMean_(0.0), maxExposureTime_(0s),
 	  prevExposure_(0s), prevExposureNoDg_(0s),
 	  currentExposure_(0s), currentExposureNoDg_(0s)
 {
 }
 
-void IPU3Agc::initialise(struct ipu3_uapi_grid_config &bdsGrid, const IPACameraSensorInfo &sensorInfo)
+int Agc::configure(IPAContext &context)
 {
-	aeGrid_ = bdsGrid;
+	/* The AGC algorithm uses the AWB statistics */
+	aeGrid_ = context.awb.grid.bdsGrid;
+	maxExposureTime_ = kMaxExposure * context.agc.lineDuration;
 
-	lineDuration_ = sensorInfo.lineLength * 1.0s / sensorInfo.pixelRate;
-	maxExposureTime_ = kMaxExposure * lineDuration_;
+	return 0;
 }
 
-void IPU3Agc::processBrightness(const ipu3_uapi_stats_3a *stats)
+void Agc::processBrightness(const ipu3_uapi_stats_3a *stats)
 {
 	const struct ipu3_uapi_grid_config statsAeGrid = stats->stats_4a_config.awb_config.grid;
 	Rectangle aeRegion = { statsAeGrid.x_start,
@@ -108,7 +107,7 @@ void IPU3Agc::processBrightness(const ipu3_uapi_stats_3a *stats)
 	iqMean_ = Histogram(Span<uint32_t>(hist)).interQuantileMean(0.98, 1.0);
 }
 
-void IPU3Agc::filterExposure()
+void Agc::filterExposure()
 {
 	double speed = 0.2;
 	if (prevExposure_ == 0s) {
@@ -128,7 +127,7 @@ void IPU3Agc::filterExposure()
 		prevExposure_ = speed * currentExposure_ +
 				prevExposure_ * (1.0 - speed);
 		prevExposureNoDg_ = speed * currentExposureNoDg_ +
-				prevExposureNoDg_ * (1.0 - speed);
+				    prevExposureNoDg_ * (1.0 - speed);
 	}
 	/*
 	 * We can't let the no_dg exposure deviate too far below the
@@ -142,7 +141,7 @@ void IPU3Agc::filterExposure()
 	LOG(IPU3Agc, Debug) << "After filtering, total_exposure " << prevExposure_;
 }
 
-void IPU3Agc::lockExposureGain(uint32_t &exposure, double &gain)
+void Agc::lockExposureGain(IPAContext &context)
 {
 	updateControls_ = false;
 
@@ -160,7 +159,9 @@ void IPU3Agc::lockExposureGain(uint32_t &exposure, double &gain)
 		double newGain = kEvGainTarget * knumHistogramBins / iqMean_;
 
 		/* extracted from Rpi::Agc::computeTargetExposure */
-		libcamera::utils::Duration currentShutter = exposure * lineDuration_;
+		libcamera::utils::Duration currentShutter = context.agc.shutterTime;
+		uint32_t exposure = currentShutter / context.agc.lineDuration;
+		double &gain = context.agc.analogueGain;
 		currentExposureNoDg_ = currentShutter * gain;
 		LOG(IPU3Agc, Debug) << "Actual total exposure " << currentExposureNoDg_
 				    << " Shutter speed " << currentShutter
@@ -177,26 +178,27 @@ void IPU3Agc::lockExposureGain(uint32_t &exposure, double &gain)
 		if (currentShutter < maxExposureTime_) {
 			exposure = std::clamp(static_cast<uint32_t>(exposure * currentExposure_ / currentExposureNoDg_), kMinExposure, kMaxExposure);
 			newExposure = currentExposure_ / exposure;
-			gain = std::clamp(static_cast<uint32_t>(gain * currentExposure_ / newExposure), kMinGain, kMaxGain);
+			gain = std::clamp(static_cast<double>(gain * currentExposure_ / newExposure), kMinGain, kMaxGain);
 			updateControls_ = true;
 		} else if (currentShutter >= maxExposureTime_) {
-			gain = std::clamp(static_cast<uint32_t>(gain * currentExposure_ / currentExposureNoDg_), kMinGain, kMaxGain);
+			gain = std::clamp(static_cast<double>(gain * currentExposure_ / currentExposureNoDg_), kMinGain, kMaxGain);
 			newExposure = currentExposure_ / gain;
 			exposure = std::clamp(static_cast<uint32_t>(exposure * currentExposure_ / newExposure), kMinExposure, kMaxExposure);
 			updateControls_ = true;
 		}
-		LOG(IPU3Agc, Debug) << "Adjust exposure " << exposure * lineDuration_ << " and gain " << gain;
+		context.agc.shutterTime = exposure * context.agc.lineDuration;
+		LOG(IPU3Agc, Debug) << "Adjust exposure " << exposure * context.agc.lineDuration << " and gain " << gain;
 	}
 	lastFrame_ = frameCount_;
 }
 
-void IPU3Agc::process(const ipu3_uapi_stats_3a *stats, uint32_t &exposure, double &gain)
+void Agc::process(IPAContext &context)
 {
-	processBrightness(stats);
-	lockExposureGain(exposure, gain);
+	processBrightness(context.stats);
+	lockExposureGain(context);
 	frameCount_++;
 }
 
-} /* namespace ipa::ipu3 */
+} /* namespace ipa::ipu3::algorithms */
 
 } /* namespace libcamera */

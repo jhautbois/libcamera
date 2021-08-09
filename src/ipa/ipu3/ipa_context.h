@@ -11,9 +11,13 @@
 
 #include <linux/intel-ipu3.h>
 
+#include <libcamera/base/utils.h>
+
 #include <libcamera/geometry.h>
 
 namespace libcamera {
+
+using libcamera::utils::Duration;
 
 namespace ipa::ipu3 {
 
@@ -33,6 +37,13 @@ struct IPAContext {
 			Size bdsOutputSize;
 		} grid;
 	} awb;
+
+	/* AGC specific parameters to share */
+	struct Agc {
+		Duration lineDuration;
+		Duration shutterTime;
+		double analogueGain;
+	} agc;
 };
 
 } /* namespace ipa::ipu3 */

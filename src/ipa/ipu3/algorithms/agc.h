@@ -4,44 +4,44 @@
  *
  * ipu3_agc.h - IPU3 AGC/AEC control algorithm
  */
-#ifndef __LIBCAMERA_IPU3_AGC_H__
-#define __LIBCAMERA_IPU3_AGC_H__
+#ifndef __LIBCAMERA_IPU3_ALGORITHMS_AGC_H__
+#define __LIBCAMERA_IPU3_ALGORITHMS_AGC_H__
+
+#include <linux/intel-ipu3.h>
 
 #include <array>
 #include <unordered_map>
-
-#include <linux/intel-ipu3.h>
 
 #include <libcamera/base/utils.h>
 
 #include <libcamera/geometry.h>
 
-#include "algorithms/algorithm.h"
-#include "libipa/algorithm.h"
+#include "algorithm.h"
 
 namespace libcamera {
 
 struct IPACameraSensorInfo;
 
-namespace ipa::ipu3 {
+namespace ipa::ipu3::algorithms {
 
 using utils::Duration;
 
-class IPU3Agc : public ipa::Algorithm
+class Agc : public Algorithm
 {
 public:
-	IPU3Agc();
-	~IPU3Agc() = default;
+	Agc();
+	~Agc() = default;
 
-	void initialise(struct ipu3_uapi_grid_config &bdsGrid, const IPACameraSensorInfo &sensorInfo);
-	void process(const ipu3_uapi_stats_3a *stats, uint32_t &exposure, double &gain);
+	int configure(IPAContext &context) override;
+	void process(IPAContext &context) override;
+
 	bool converged() { return converged_; }
 	bool updateControls() { return updateControls_; }
 
 private:
 	void processBrightness(const ipu3_uapi_stats_3a *stats);
 	void filterExposure();
-	void lockExposureGain(uint32_t &exposure, double &gain);
+	void lockExposureGain(IPAContext &context);
 
 	struct ipu3_uapi_grid_config aeGrid_;
 
@@ -53,7 +53,6 @@ private:
 
 	double iqMean_;
 
-	Duration lineDuration_;
 	Duration maxExposureTime_;
 
 	Duration prevExposure_;
@@ -62,8 +61,8 @@ private:
 	Duration currentExposureNoDg_;
 };
 
-} /* namespace ipa::ipu3 */
+} /* namespace ipa::ipu3::algorithms */
 
 } /* namespace libcamera */
 
-#endif /* __LIBCAMERA_IPU3_AGC_H__ */
+#endif /* __LIBCAMERA_IPU3_ALGORITHMS_AGC_H__ */

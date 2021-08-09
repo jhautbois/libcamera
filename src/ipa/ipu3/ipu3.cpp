@@ -22,12 +22,12 @@
 
 #include "libcamera/internal/framebuffer.h"
 
+#include "algorithms/agc.h"
 #include "algorithms/algorithm.h"
 #include "algorithms/awb.h"
 #include "algorithms/contrast.h"
 #include "ipa_context.h"
 
-#include "ipu3_agc.h"
 #include "libipa/camera_sensor_helper.h"
 
 static constexpr uint32_t kMaxCellWidthPerSet = 160;
@@ -36,6 +36,8 @@ static constexpr uint32_t kMaxCellHeightPerSet = 56;
 namespace libcamera {
 
 LOG_DEFINE_CATEGORY(IPAIPU3)
+
+using namespace std::literals::chrono_literals;
 
 namespace ipa::ipu3 {
 
@@ -81,8 +83,6 @@ private:
 	uint32_t minGain_;
 	uint32_t maxGain_;
 
-	/* Interface to the AEC/AGC algorithm */
-	std::unique_ptr<IPU3Agc> agcAlgo_;
 	/* Interface to the Camera Helper */
 	std::unique_ptr<CameraSensorHelper> camHelper_;
 
@@ -103,6 +103,7 @@ int IPAIPU3::init(const IPASettings &settings)
 	}
 
 	/* Construct our Algorithms */
+	algorithms_.emplace_back(new algorithms::Agc());
 	algorithms_.emplace_back(new algorithms::Awb());
 	algorithms_.emplace_back(new algorithms::Contrast());
 
@@ -214,11 +215,14 @@ int IPAIPU3::configure(const IPAConfigInfo &configInfo)
 	calculateBdsGrid(configInfo.bdsOutputSize);
 	context_.awb.grid.bdsOutputSize = configInfo.bdsOutputSize;
 
+	/* Prepare AGC parameters */
+	context_.agc.lineDuration = sensorInfo_.lineLength * 1.0s / sensorInfo_.pixelRate;
+	context_.agc.shutterTime = exposure_ * context_.agc.lineDuration;
+	context_.agc.analogueGain = camHelper_->gain(gain_);
+
 	configureAlgorithms();
 
 	bdsGrid_ = context_.awb.grid.bdsGrid;
-	agcAlgo_ = std::make_unique<IPU3Agc>();
-	agcAlgo_->initialise(bdsGrid_, sensorInfo_);
 
 	return 0;
 }
@@ -341,12 +345,7 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 	/* Run the process for each algorithm on the stats */
 	processAlgorithms(stats);
 
-	double gain = camHelper_->gain(gain_);
-	agcAlgo_->process(stats, exposure_, gain);
-	gain_ = camHelper_->gainCode(gain);
-
-	if (agcAlgo_->updateControls())
-		setControls(frame);
+	setControls(frame);
 
 	/* \todo Use VBlank value calculated from each frame exposure. */
 	int64_t frameDuration = sensorInfo_.lineLength * (defVBlank_ + sensorInfo_.outputSize.height) /
@@ -364,6 +363,10 @@ void IPAIPU3::setControls(unsigned int frame)
 {
 	IPU3Action op;
 	op.op = ActionSetSensorControls;
+
+	/* Convert gain and exposure */
+	gain_ = camHelper_->gainCode(context_.agc.analogueGain);
+	exposure_ = context_.agc.shutterTime / context_.agc.lineDuration;
 
 	ControlList ctrls(ctrls_);
 	ctrls.set(V4L2_CID_EXPOSURE, static_cast<int32_t>(exposure_));
