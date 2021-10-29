@@ -667,6 +667,8 @@ int PipelineHandlerIPU3::configure(Camera *camera, CameraConfiguration *c)
 		return ret;
 	}
 
+	data->delayedCtrls_->reset();
+
 	return updateControls(data);
 }
 
@@ -1363,6 +1365,8 @@ void IPU3CameraData::cio2BufferReady(FrameBuffer *buffer)
 	request->metadata().set(controls::SensorTimestamp,
 				buffer->metadata().timestamp);
 
+	info->effectiveSensorControls = delayedCtrls_->get(buffer->metadata().sequence);
+
 	if (request->findBuffer(&rawStream_))
 		pipe()->completeBuffer(request, buffer);
 
@@ -1419,6 +1423,7 @@ void IPU3CameraData::statBufferReady(FrameBuffer *buffer)
 	ev.frame = info->id;
 	ev.bufferId = info->statBuffer->cookie();
 	ev.frameTimestamp = request->metadata().get(controls::SensorTimestamp);
+	ev.sensorControls = info->effectiveSensorControls;
 	ipa_->processEvent(ev);
 }
 

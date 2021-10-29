@@ -12,6 +12,7 @@
 #include <queue>
 #include <vector>
 
+#include <libcamera/controls.h>
 #include <libcamera/base/signal.h>
 
 namespace libcamera {
@@ -33,6 +34,8 @@ public:
 		FrameBuffer *rawBuffer;
 		FrameBuffer *paramBuffer;
 		FrameBuffer *statBuffer;
+
+		ControlList effectiveSensorControls;
 
 		bool paramDequeued;
 		bool metadataProcessed;
