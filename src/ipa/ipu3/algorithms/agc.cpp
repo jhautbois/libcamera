@@ -193,15 +193,12 @@ void Agc::computeExposure(uint32_t &exposure, double &analogueGain, double curre
 	/* Estimate the gain needed to have the proportion wanted */
 	double evGain = kEvGainTarget * knumHistogramBins / iqMean_;
 
-	if (std::abs(evGain - 1.0) < 0.01) {
-		LOG(IPU3Agc, Debug) << "We are well exposed (iqMean = "
-				    << iqMean_ << ")";
-		return;
-	}
-
 	/* extracted from Rpi::Agc::computeTargetExposure */
 	/* Calculate the shutter time in seconds */
 	utils::Duration currentShutter = exposure * lineDuration_;
+	/* Update the exposure value for the next computation. */
+	prevExposureValue_ = currentShutter * analogueGain;
+
 	LOG(IPU3Agc, Debug) << "Actual total exposure " << currentShutter * analogueGain
 			    << " Shutter speed " << currentShutter
 			    << " Gain " << analogueGain
@@ -251,16 +248,6 @@ void Agc::computeExposure(uint32_t &exposure, double &analogueGain, double curre
 
 	exposure = shutterTime / lineDuration_;
 	analogueGain = stepGain;
-
-	/*
-	 * Update the exposure value for the next process call.
-	 *
-	 * \todo Obtain the values of the exposure time and analog gain
-	 * that were actually used by the sensor, either from embedded
-	 * data when available, or from the delayed controls
-	 * infrastructure in case a slow down caused a mismatch.
-	 */
-	prevExposureValue_ = shutterTime * analogueGain;
 }
 
 /**
