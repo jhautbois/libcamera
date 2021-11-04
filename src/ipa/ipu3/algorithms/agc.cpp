@@ -68,8 +68,8 @@ static constexpr uint32_t kMinCellsPerZoneRatio = 255 * 20 / 100;
 static constexpr uint32_t kNumStartupFrames = 10;
 
 Agc::Agc()
-	: frameCount_(0), iqMean_(0.0), lineDuration_(0s), minExposureLines_(0),
-	  maxExposureLines_(0), filteredExposure_(0s), currentExposure_(0s),
+	: frameCount_(0), iqMean_(0.0), lineDuration_(0s), minShutterSpeed_(0s),
+	  maxShutterSpeed_(0s), filteredExposure_(0s), currentExposure_(0s),
 	  prevExposureValue_(0s)
 {
 }
@@ -89,17 +89,16 @@ int Agc::configure(IPAContext &context, const IPAConfigInfo &configInfo)
 	lineDuration_ = configInfo.sensorInfo.lineLength * 1.0s
 		      / configInfo.sensorInfo.pixelRate;
 
-	/* \todo replace the exposure in lines storage with time based ones. */
-	minExposureLines_ = context.configuration.agc.minShutterSpeed / lineDuration_;
-	maxExposureLines_ = std::min(context.configuration.agc.maxShutterSpeed / lineDuration_,
-				     kMaxShutterSpeed / lineDuration_);
+	minShutterSpeed_ = context.configuration.agc.minShutterSpeed;
+	maxShutterSpeed_ = std::min(context.configuration.agc.maxShutterSpeed,
+				    kMaxShutterSpeed);
 
 	minAnalogueGain_ = std::max(context.configuration.agc.minAnalogueGain, kMinAnalogueGain);
 	maxAnalogueGain_ = std::min(context.configuration.agc.maxAnalogueGain, kMaxAnalogueGain);
 
 	/* Configure the default exposure and gain. */
 	context.frameContext.agc.gain = minAnalogueGain_;
-	context.frameContext.agc.exposure = minExposureLines_;
+	context.frameContext.agc.exposure = minShutterSpeed_ / lineDuration_;
 
 	prevExposureValue_ = context.frameContext.agc.gain
 			   * context.frameContext.agc.exposure
@@ -218,11 +217,9 @@ void Agc::computeExposure(uint32_t &exposure, double &analogueGain, double curre
 	 * exposure value applied multiplied by the new estimated gain.
 	 */
 	currentExposure_ = prevExposureValue_ * evGain;
-	utils::Duration minShutterSpeed = minExposureLines_ * lineDuration_;
-	utils::Duration maxShutterSpeed = maxExposureLines_ * lineDuration_;
 
 	/* Clamp the exposure value to the min and max authorized */
-	utils::Duration maxTotalExposure = maxShutterSpeed * maxAnalogueGain_;
+	utils::Duration maxTotalExposure = maxShutterSpeed_ * maxAnalogueGain_;
 	currentExposure_ = std::min(currentExposure_, maxTotalExposure);
 	LOG(IPU3Agc, Debug) << "Target total exposure " << currentExposure_
 			    << ", maximum is " << maxTotalExposure;
@@ -232,14 +229,14 @@ void Agc::computeExposure(uint32_t &exposure, double &analogueGain, double curre
 
 	/* Divide the exposure value as new exposure and gain values */
 	utils::Duration exposureValue = filteredExposure_;
-	utils::Duration shutterTime = minShutterSpeed;
+	utils::Duration shutterTime = minShutterSpeed_;
 
 	/*
 	* Push the shutter time up to the maximum first, and only then
 	* increase the gain.
 	*/
 	shutterTime = std::clamp<utils::Duration>(exposureValue / minAnalogueGain_,
-						  minShutterSpeed, maxShutterSpeed);
+						  minShutterSpeed_, maxShutterSpeed_);
 	double stepGain = std::clamp(exposureValue / shutterTime,
 				     minAnalogueGain_, maxAnalogueGain_);
 	LOG(IPU3Agc, Debug) << "Divided up shutter and gain are "
