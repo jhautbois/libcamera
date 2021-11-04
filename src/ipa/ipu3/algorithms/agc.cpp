@@ -96,14 +96,6 @@ int Agc::configure(IPAContext &context, const IPAConfigInfo &configInfo)
 	minAnalogueGain_ = std::max(context.configuration.agc.minAnalogueGain, kMinAnalogueGain);
 	maxAnalogueGain_ = std::min(context.configuration.agc.maxAnalogueGain, kMaxAnalogueGain);
 
-	/* Configure the default exposure and gain. */
-	context.frameContext.agc.gain = minAnalogueGain_;
-	context.frameContext.agc.exposure = minShutterSpeed_ / lineDuration_;
-
-	prevExposureValue_ = context.frameContext.agc.gain
-			   * context.frameContext.agc.exposure
-			   * lineDuration_;
-
 	return 0;
 }
 
