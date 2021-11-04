@@ -189,16 +189,14 @@ void Agc::filterExposure()
  */
 void Agc::computeExposure(uint32_t &exposure, double &analogueGain)
 {
+	/* Estimate the gain needed to have the proportion wanted */
+	double evGain = kEvGainTarget * knumHistogramBins / iqMean_;
 
-	/* Are we correctly exposed ? */
-	if (std::abs(iqMean_ - kEvGainTarget * knumHistogramBins) <= 1) {
+	if (std::abs(evGain - 1.0) < 0.01) {
 		LOG(IPU3Agc, Debug) << "We are well exposed (iqMean = "
 				    << iqMean_ << ")";
 		return;
 	}
-
-	/* Estimate the gain needed to have the proportion wanted */
-	double evGain = kEvGainTarget * knumHistogramBins / iqMean_;
 
 	/* extracted from Rpi::Agc::computeTargetExposure */
 	/* Calculate the shutter time in seconds */
