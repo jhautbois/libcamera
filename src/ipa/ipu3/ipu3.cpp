@@ -460,6 +460,8 @@ int IPAIPU3::configure(const IPAConfigInfo &configInfo,
 	calculateBdsGrid(configInfo.bdsOutputSize);
 
 	lineDuration_ = sensorInfo_.lineLength * 1.0s / sensorInfo_.pixelRate;
+	exposure_ = 20ms / lineDuration_;
+	gain_ = camHelper_->gainCode(1.0);
 
 	/* Update the camera controls using the new sensor settings. */
 	updateControls(sensorInfo_, ctrls_, ipaControls);
@@ -622,7 +624,11 @@ void IPAIPU3::parseStatistics(unsigned int frame,
 	for (auto const &algo : algorithms_)
 		algo->process(context_, stats);
 
-	setControls(frame);
+	exposure_ = context_.frameContext.agc.exposure;
+	gain_ = camHelper_->gainCode(context_.frameContext.agc.gain);
+
+	if (frame > 2)
+		setControls(frame);
 
 	/* \todo Use VBlank value calculated from each frame exposure. */
 	int64_t frameDuration = (defVBlank_ + sensorInfo_.outputSize.height) * lineDuration_.get<std::micro>();
@@ -660,9 +666,6 @@ void IPAIPU3::setControls(unsigned int frame)
 {
 	IPU3Action op;
 	op.op = ActionSetSensorControls;
-
-	exposure_ = context_.frameContext.agc.exposure;
-	gain_ = camHelper_->gainCode(context_.frameContext.agc.gain);
 
 	ControlList ctrls(ctrls_);
 	ctrls.set(V4L2_CID_EXPOSURE, static_cast<int32_t>(exposure_));
