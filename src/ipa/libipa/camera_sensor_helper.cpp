@@ -7,6 +7,8 @@
  */
 #include "camera_sensor_helper.h"
 
+#include <cmath>
+
 #include <libcamera/base/log.h>
 
 /**
@@ -61,8 +63,8 @@ uint32_t CameraSensorHelper::gainCode(double gain) const
 	ASSERT(analogueGainConstants_.m0 == 0 || analogueGainConstants_.m1 == 0);
 	ASSERT(analogueGainConstants_.type == AnalogueGainLinear);
 
-	return (analogueGainConstants_.c0 - analogueGainConstants_.c1 * gain) /
-	       (analogueGainConstants_.m1 * gain - analogueGainConstants_.m0);
+	return std::round((analogueGainConstants_.c0 - analogueGainConstants_.c1 * gain) /
+			  (analogueGainConstants_.m1 * gain - analogueGainConstants_.m0));
 }
 
 /**
