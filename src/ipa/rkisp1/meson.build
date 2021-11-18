@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: CC0-1.0
+subdir('algorithms')
 
 ipa_name = 'ipa_rkisp1'
 
@@ -6,6 +7,8 @@ rkisp1_ipa_sources = files([
     'ipa_context.cpp',
     'rkisp1.cpp',
 ])
+
+rkisp1_ipa_sources += rkisp1_ipa_algorithms
 
 mod = shared_module(ipa_name,
                     [rkisp1_ipa_sources, libcamera_generated_ipa_headers],
