@@ -88,7 +88,7 @@ public:
 	}
 
 	PipelineHandlerRkISP1 *pipe();
-	int loadIPA(unsigned int hwRevision);
+	int loadIPA(const IPASettings &settings, unsigned int hwRevision);
 
 	Stream mainPathStream_;
 	Stream selfPathStream_;
@@ -310,7 +310,7 @@ PipelineHandlerRkISP1 *RkISP1CameraData::pipe()
 	return static_cast<PipelineHandlerRkISP1 *>(Camera::Private::pipe());
 }
 
-int RkISP1CameraData::loadIPA(unsigned int hwRevision)
+int RkISP1CameraData::loadIPA(const IPASettings &settings, unsigned int hwRevision)
 {
 	ipa_ = IPAManager::createIPA<ipa::rkisp1::IPAProxyRkISP1>(pipe(), 1, 1);
 	if (!ipa_)
@@ -319,7 +319,7 @@ int RkISP1CameraData::loadIPA(unsigned int hwRevision)
 	ipa_->queueFrameAction.connect(this,
 				       &RkISP1CameraData::queueFrameAction);
 
-	int ret = ipa_->init(hwRevision);
+	int ret = ipa_->init(settings, hwRevision);
 	if (ret < 0) {
 		LOG(RkISP1, Error) << "IPA initialization failure";
 		return ret;
@@ -965,7 +965,8 @@ int PipelineHandlerRkISP1::createCamera(MediaEntity *sensor)
 	isp_->frameStart.connect(data->delayedCtrls_.get(),
 				 &DelayedControls::applyControls);
 
-	ret = data->loadIPA(media_->hwRevision());
+	ret = data->loadIPA(IPASettings{ "", data->sensor_->model() },
+			    media_->hwRevision());
 	if (ret)
 		return ret;
 
