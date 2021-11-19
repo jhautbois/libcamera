@@ -55,4 +55,48 @@ namespace libcamera::ipa::rkisp1 {
  * are run. This needs to be turned into real per-frame data storage.
  */
 
+/**
+ * \var IPASessionConfiguration::agc
+ * \brief AGC parameters configuration of the IPA
+ *
+ * \var IPASessionConfiguration::agc.minShutterSpeed
+ * \brief Minimum shutter speed supported with the configured sensor
+ *
+ * \var IPASessionConfiguration::agc.maxShutterSpeed
+ * \brief Maximum shutter speed supported with the configured sensor
+ *
+ * \var IPASessionConfiguration::agc.minAnalogueGain
+ * \brief Minimum analogue gain supported with the configured sensor
+ *
+ * \var IPASessionConfiguration::agc.maxAnalogueGain
+ * \brief Maximum analogue gain supported with the configured sensor
+ */
+
+/**
+ * \var IPAFrameContext::agc
+ * \brief Context for the Automatic Gain Control algorithm
+ *
+ * The exposure and gain determined are expected to be applied to the sensor
+ * at the earliest opportunity.
+ *
+ * \var IPAFrameContext::agc.exposure
+ * \brief Exposure time expressed as a number of lines
+ *
+ * \var IPAFrameContext::agc.gain
+ * \brief Analogue gain multiplier
+ *
+ * The gain should be adapted to the sensor specific gain code before applying.
+ */
+
+/**
+ * \var IPAFrameContext::sensor
+ * \brief Effective sensor values
+ *
+ * \var IPAFrameContext::sensor.exposure
+ * \brief Exposure time expressed as a number of lines
+ *
+ * \var IPAFrameContext::sensor.gain
+ * \brief Analogue gain multiplier
+ */
+
 } /* namespace libcamera::ipa::rkisp1 */
