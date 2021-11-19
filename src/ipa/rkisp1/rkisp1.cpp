@@ -75,7 +75,6 @@ private:
 	uint32_t maxGain_;
 
 	/* revision-specific data */
-	unsigned int hwAeMeanMax_;
 	unsigned int hwHistBinNMax_;
 	unsigned int hwGammaOutMaxSamples_;
 	unsigned int hwHistogramWeightGridsSize_;
@@ -98,13 +97,13 @@ int IPARkISP1::init([[maybe_unused]] const IPASettings &settings,
 	/* \todo Add support for other revisions */
 	switch (hwRevision) {
 	case RKISP1_V10:
-		hwAeMeanMax_ = RKISP1_CIF_ISP_AE_MEAN_MAX_V10;
+		context_.configuration.agc.numCells = RKISP1_CIF_ISP_AE_MEAN_MAX_V10;
 		hwHistBinNMax_ = RKISP1_CIF_ISP_HIST_BIN_N_MAX_V10;
 		hwGammaOutMaxSamples_ = RKISP1_CIF_ISP_GAMMA_OUT_MAX_SAMPLES_V10;
 		hwHistogramWeightGridsSize_ = RKISP1_CIF_ISP_HISTOGRAM_WEIGHT_GRIDS_SIZE_V10;
 		break;
 	case RKISP1_V12:
-		hwAeMeanMax_ = RKISP1_CIF_ISP_AE_MEAN_MAX_V12;
+		context_.configuration.agc.numCells = RKISP1_CIF_ISP_AE_MEAN_MAX_V12;
 		hwHistBinNMax_ = RKISP1_CIF_ISP_HIST_BIN_N_MAX_V12;
 		hwGammaOutMaxSamples_ = RKISP1_CIF_ISP_GAMMA_OUT_MAX_SAMPLES_V12;
 		hwHistogramWeightGridsSize_ = RKISP1_CIF_ISP_HISTOGRAM_WEIGHT_GRIDS_SIZE_V12;

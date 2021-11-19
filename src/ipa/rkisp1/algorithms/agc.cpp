@@ -82,6 +82,8 @@ int Agc::configure(IPAContext &context, const IPACameraSensorInfo &configInfo)
 	context.frameContext.agc.gain = minAnalogueGain_;
 	context.frameContext.agc.exposure = 10ms / lineDuration_;
 
+	numCells_ = context.configuration.agc.numCells;
+
 	return 0;
 }
 
@@ -195,7 +197,7 @@ double Agc::computeInitialY(const rkisp1_cif_isp_ae_stat *ae, double currentYGai
 	double ySum = 0.0;
 	unsigned int num = 0;
 
-	for (unsigned int aeCell = 0; aeCell < RKISP1_CIF_ISP_AE_MEAN_MAX_V10; aeCell++) {
+	for (unsigned int aeCell = 0; aeCell < numCells_; aeCell++) {
 		ySum += ae->exp_mean[aeCell] * currentYGain;
 		num++;
 	}

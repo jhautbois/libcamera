@@ -24,6 +24,7 @@ struct IPASessionConfiguration {
 		utils::Duration maxShutterSpeed;
 		double minAnalogueGain;
 		double maxAnalogueGain;
+		uint32_t numCells;
 	} agc;
 };
 

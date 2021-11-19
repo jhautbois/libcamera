@@ -45,6 +45,8 @@ private:
 	double minAnalogueGain_;
 	double maxAnalogueGain_;
 
+	uint32_t numCells_;
+
 	utils::Duration filteredExposure_;
 	utils::Duration currentExposure_;
 };

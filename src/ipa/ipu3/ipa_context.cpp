@@ -84,6 +84,9 @@ namespace libcamera::ipa::ipu3 {
  *
  * \var IPASessionConfiguration::grid.maxAnalogueGain
  * \brief Maximum analogue gain supported with the configured sensor
+ *
+ * \var IPASessionConfiguration::agc.numCells
+ * \brief Number of cells used by the ISP to store the Y means
  */
 
 /**
