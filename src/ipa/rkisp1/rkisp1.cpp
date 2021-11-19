@@ -25,12 +25,15 @@
 
 #include <libcamera/internal/mapped_framebuffer.h>
 
+#include "algorithms/agc.h"
 #include "algorithms/algorithm.h"
 #include "libipa/camera_sensor_helper.h"
 
 namespace libcamera {
 
 LOG_DEFINE_CATEGORY(IPARkISP1)
+
+using namespace std::literals::chrono_literals;
 
 namespace ipa::rkisp1 {
 
@@ -77,6 +80,8 @@ private:
 	unsigned int hwGammaOutMaxSamples_;
 	unsigned int hwHistogramWeightGridsSize_;
 
+	utils::Duration lineDuration_;
+
 	/* Interface to the Camera Helper */
 	std::unique_ptr<CameraSensorHelper> camHelper_;
 
@@ -120,6 +125,9 @@ int IPARkISP1::init([[maybe_unused]] const IPASettings &settings,
 			<< settings.sensorModel;
 		return -ENODEV;
 	}
+
+	/* Construct our Algorithms */
+	algorithms_.push_back(std::make_unique<algorithms::Agc>());
 
 	return 0;
 }
@@ -172,8 +180,28 @@ int IPARkISP1::configure([[maybe_unused]] const IPACameraSensorInfo &info,
 		<< "Exposure: " << minExposure_ << "-" << maxExposure_
 		<< " Gain: " << minGain_ << "-" << maxGain_;
 
+	lineDuration_ = info.lineLength * 1.0s / info.pixelRate;
+
 	/* Clean context at configuration */
 	context_ = {};
+
+	/*
+	 * When the AGC computes the new exposure values for a frame, it needs
+	 * to know the limits for shutter speed and analogue gain.
+	 * As it depends on the sensor, update it with the controls.
+	 *
+	 * \todo take VBLANK into account for maximum shutter speed
+	 */
+	context_.configuration.agc.minShutterSpeed = minExposure_ * lineDuration_;
+	context_.configuration.agc.maxShutterSpeed = maxExposure_ * lineDuration_;
+	context_.configuration.agc.minAnalogueGain = camHelper_->gain(minGain_);
+	context_.configuration.agc.maxAnalogueGain = camHelper_->gain(maxGain_);
+
+	for (auto const &algo : algorithms_) {
+		int ret = algo->configure(context_, info);
+		if (ret)
+			return ret;
+	}
 
 	return 0;
 }
@@ -219,6 +247,9 @@ void IPARkISP1::processEvent(const RkISP1Event &event)
 			reinterpret_cast<rkisp1_stat_buffer *>(
 				mappedBuffers_.at(bufferId).planes()[0].data());
 
+		context_.frameContext.sensor.exposure = event.sensorControls.get(V4L2_CID_EXPOSURE).get<int32_t>();
+		context_.frameContext.sensor.gain = camHelper_->gain(event.sensorControls.get(V4L2_CID_ANALOGUE_GAIN).get<int32_t>());
+
 		updateStatistics(frame, stats);
 		break;
 	}
@@ -263,44 +294,12 @@ void IPARkISP1::queueRequest(unsigned int frame, rkisp1_params_cfg *params,
 void IPARkISP1::updateStatistics(unsigned int frame,
 				 const rkisp1_stat_buffer *stats)
 {
-	const rkisp1_cif_isp_stat *params = &stats->params;
 	unsigned int aeState = 0;
 
-	if (stats->meas_type & RKISP1_CIF_ISP_STAT_AUTOEXP) {
-		const rkisp1_cif_isp_ae_stat *ae = &params->ae;
+	for (auto const &algo : algorithms_)
+		algo->process(context_, stats);
 
-		const unsigned int target = 60;
-
-		unsigned int value = 0;
-		unsigned int num = 0;
-		for (unsigned int i = 0; i < hwAeMeanMax_; i++) {
-			if (ae->exp_mean[i] <= 15)
-				continue;
-
-			value += ae->exp_mean[i];
-			num++;
-		}
-		value /= num;
-
-		double factor = (double)target / value;
-
-		if (frame % 3 == 0) {
-			double exposure;
-
-			exposure = factor * exposure_ * gain_ / minGain_;
-			exposure_ = std::clamp<uint64_t>((uint64_t)exposure,
-							 minExposure_,
-							 maxExposure_);
-
-			exposure = exposure / exposure_ * minGain_;
-			gain_ = std::clamp<uint64_t>((uint64_t)exposure,
-						     minGain_, maxGain_);
-
-			setControls(frame + 1);
-		}
-
-		aeState = fabs(factor - 1.0f) < 0.05f ? 2 : 1;
-	}
+	setControls(frame + 1);
 
 	metadataReady(frame, aeState);
 }
@@ -309,6 +308,9 @@ void IPARkISP1::setControls(unsigned int frame)
 {
 	RkISP1Action op;
 	op.op = ActionV4L2Set;
+
+	exposure_ = context_.frameContext.agc.exposure;
+	gain_ = camHelper_->gainCode(context_.frameContext.agc.gain);
 
 	ControlList ctrls(ctrls_);
 	ctrls.set(V4L2_CID_EXPOSURE, static_cast<int32_t>(exposure_));
