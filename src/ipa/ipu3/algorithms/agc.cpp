@@ -269,7 +269,7 @@ void Agc::computeExposure(IPAFrameContext &frameContext, double yGain,
  * More detailed information can be found in:
  * https://en.wikipedia.org/wiki/Relative_luminance
  */
-double Agc::estimateLuminance(IPAFrameContext &frameContext,
+double Agc::estimateLuminance([[maybe_unused]] IPAFrameContext &frameContext,
 			      const ipu3_uapi_grid_config &grid,
 			      const ipu3_uapi_stats_3a *stats,
 			      double gain)
@@ -294,12 +294,10 @@ double Agc::estimateLuminance(IPAFrameContext &frameContext,
 	}
 
 	/*
-	 * Apply the AWB gains to approximate colours correctly, use the Rec.
-	 * 601 formula to calculate the relative luminance, and normalize it.
+	 * Use the Rec. 601 formula to calculate the relative luminance, and
+	 * normalize it.
 	 */
-	double ySum = redSum * frameContext.awb.gains.red * 0.299
-		    + greenSum * frameContext.awb.gains.green * 0.587
-		    + blueSum * frameContext.awb.gains.blue * 0.114;
+	double ySum = redSum * 0.299 + greenSum * 0.587 + blueSum * 0.114;
 
 	return ySum / (grid.height * grid.width) / 255;
 }

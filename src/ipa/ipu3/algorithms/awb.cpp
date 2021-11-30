@@ -442,15 +442,18 @@ void Awb::prepare(IPAContext &context, ipu3_uapi_params *params)
 	params->acc_param.bnr.opt_center_sqr.y_sqr_reset = params->acc_param.bnr.opt_center.y_reset
 							* params->acc_param.bnr.opt_center.y_reset;
 	/* Convert to u3.13 fixed point values */
-	params->acc_param.bnr.wb_gains.gr = 8192 * context.frameContext.awb.gains.green;
-	params->acc_param.bnr.wb_gains.r  = 8192 * context.frameContext.awb.gains.red;
-	params->acc_param.bnr.wb_gains.b  = 8192 * context.frameContext.awb.gains.blue;
-	params->acc_param.bnr.wb_gains.gb = 8192 * context.frameContext.awb.gains.green;
+	params->acc_param.bnr.wb_gains.gr = 8192;
+	params->acc_param.bnr.wb_gains.r = 8192;
+	params->acc_param.bnr.wb_gains.b = 8192;
+	params->acc_param.bnr.wb_gains.gb = 8192;
 
 	LOG(IPU3Awb, Debug) << "Color temperature estimated: " << asyncResults_.temperatureK;
 
 	/* The CCM matrix may change when color temperature will be used */
 	params->acc_param.ccm = imguCssCcmDefault;
+	params->acc_param.ccm.coeff_m11 = 8191 * context.frameContext.awb.gains.red;
+	params->acc_param.ccm.coeff_m22 = 8191 * context.frameContext.awb.gains.green;
+	params->acc_param.ccm.coeff_m33 = 8191 * context.frameContext.awb.gains.blue;
 
 	params->use.acc_awb = 1;
 	params->use.acc_bnr = 1;
