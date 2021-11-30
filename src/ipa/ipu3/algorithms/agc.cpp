@@ -297,7 +297,9 @@ double Agc::estimateLuminance([[maybe_unused]] IPAFrameContext &frameContext,
 	 * Use the Rec. 601 formula to calculate the relative luminance, and
 	 * normalize it.
 	 */
-	double ySum = redSum * 0.299 + greenSum * 0.587 + blueSum * 0.114;
+	double ySum = redSum * frameContext.awb.gains.red * 0.299
+		    + greenSum * frameContext.awb.gains.green * 0.587
+		    + blueSum * frameContext.awb.gains.blue * 0.114;
 
 	return ySum / (grid.height * grid.width) / 255;
 }

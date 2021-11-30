@@ -387,6 +387,11 @@ void IPAIPU3::calculateBdsGrid(const Size &bdsOutputSize)
 	bdsGrid.height = best.height >> bestLog2.height;
 	bdsGrid.block_height_log2 = bestLog2.height;
 
+	bdsGrid.width = (best.width / 2) >> bestLog2.width;
+	bdsGrid.x_start = best.width / 4;
+	bdsGrid.height = (best.height / 2) >> bestLog2.height;
+	bdsGrid.y_start = best.height / 4;
+
 	/* The ImgU pads the lines to a multiple of 4 cells. */
 	context_.configuration.grid.stride = utils::alignUp(bdsGrid.width, 4);
 
