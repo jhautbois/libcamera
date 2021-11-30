@@ -81,11 +81,11 @@ void ToneMapping::process(IPAContext &context,
 			  [[maybe_unused]] const ipu3_uapi_stats_3a *stats)
 {
 	/*
-	 * Hardcode gamma to 1.1 as a default for now.
+	 * Hardcode gamma to 1.0 as a default for now.
 	 *
 	 * \todo Expose gamma control setting through the libcamera control API
 	 */
-	gamma_ = 1.1;
+	gamma_ = 1.0;
 
 	if (context.frameContext.toneMapping.gamma == gamma_)
 		return;
