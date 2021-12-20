@@ -38,6 +38,27 @@ static void displayGrid(struct ipu3_uapi_grid_config *grid, const char *gridName
 		grid->height << grid->block_height_log2);
 }
 
+static void displayBNR(struct ipu3_uapi_params *params)
+{
+	struct ipu3_uapi_bnr_static_config bnr = params->acc_param.bnr;
+	fprintf(stderr, "WB gains: (gr: %u, r: %u, gb: %u, b: %u)\n",
+		bnr.wb_gains.gr, bnr.wb_gains.r,
+		bnr.wb_gains.gb, bnr.wb_gains.b);
+	fprintf(stderr, "WB gains thresholds: (gr: %u, r: %u, gb: %u, b: %u)\n",
+		bnr.wb_gains_thr.gr, bnr.wb_gains_thr.r,
+		bnr.wb_gains_thr.gb, bnr.wb_gains_thr.b);
+	fprintf(stderr, "Optical window center: (%d, %d) column size is %u\n",
+		bnr.opt_center.x_reset, bnr.opt_center.y_reset, bnr.column_size);
+	fprintf(stderr, "Noise model coefficients that controls noise threshold:\n");
+	fprintf(stderr, "Free coefficient (cf): %u, Gain coefficient(cg): %u\n",
+		bnr.thr_coeffs.cf, bnr.thr_coeffs.cg);
+	fprintf(stderr, "Intensity coefficient(ci): %u, Normalization shift value for r^2 calculation(r_nf): %u\n",
+		bnr.thr_coeffs.ci, bnr.thr_coeffs.r_nf);
+	fprintf(stderr, "Lens shading gain approximations: (gr: %u, r: %u, gb: %u, b: %u)\n",
+		bnr.thr_ctrl_shd.gr, bnr.thr_ctrl_shd.r,
+		bnr.thr_ctrl_shd.gb, bnr.thr_ctrl_shd.b);
+}
+
 static void displayAfFilter(struct ipu3_uapi_params *params)
 {
 	struct ipu3_uapi_af_filter_config filter = params->acc_param.af.filter_config;
@@ -81,6 +102,10 @@ start:
 
 	fprintf(stderr, "Read parameters buffer of size %d\n", ret);
 
+	if (params.use.acc_bnr) {
+		fprintf(stderr, "\n**** Bayer noise reduction parameters ****\n");
+		displayBNR(&params);
+	}
 	if (params.use.acc_awb) {
 		fprintf(stderr, "\n**** AWB parameters ****\n");
 		displayGrid(&params.acc_param.awb.config.grid, "awb");
