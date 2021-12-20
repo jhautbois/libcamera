@@ -6,9 +6,12 @@
  */
 
 #include <algorithm>
+#include <fcntl.h>
 #include <iomanip>
 #include <memory>
 #include <queue>
+#include <sys/mman.h>
+#include <unistd.h>
 #include <vector>
 
 #include <libcamera/base/log.h>
@@ -61,6 +64,7 @@ public:
 	void queuePendingRequests();
 	void cancelPendingRequests();
 	void frameStart(uint32_t sequence);
+	void dumpBuffer(FrameBuffer *paramBuffer);
 
 	CIO2Device cio2_;
 	ImgUDevice *imgu_;
@@ -1288,6 +1292,7 @@ void IPU3CameraData::queueFrameAction(unsigned int id,
 		}
 
 		imgu_->param_->queueBuffer(info->paramBuffer);
+		dumpBuffer(info->paramBuffer);
 		imgu_->stat_->queueBuffer(info->statBuffer);
 		imgu_->input_->queueBuffer(info->rawBuffer);
 
@@ -1310,6 +1315,24 @@ void IPU3CameraData::queueFrameAction(unsigned int id,
 	default:
 		LOG(IPU3, Error) << "Unknown action " << action.op;
 		break;
+	}
+}
+
+void IPU3CameraData::dumpBuffer(FrameBuffer *buffer)
+{
+	for (const FrameBuffer::Plane &plane : buffer->planes()) {
+		void *address = mmap(nullptr, plane.length, PROT_WRITE,
+				     MAP_SHARED, plane.fd.get(), 0);
+		if (address == MAP_FAILED) {
+			LOG(IPU3, Error) << "Failed to mmap plane";
+			break;
+		}
+
+		int out_fd = open("/tmp/IPU3_params.bin",
+				  O_WRONLY | O_TRUNC | O_CREAT, 0644);
+		write(out_fd, address, plane.length);
+		close(out_fd);
+		munmap(address, plane.length);
 	}
 }
 
