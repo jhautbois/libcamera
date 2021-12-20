@@ -81,13 +81,20 @@ start:
 
 	fprintf(stderr, "Read parameters buffer of size %d\n", ret);
 
-	fprintf(stderr, "\n**** AWB parameters ****\n");
-	displayGrid(&params.acc_param.awb.config.grid, "awb");
-	displayGrid(&params.acc_param.awb_fr.grid_cfg, "awb_fr");
+	if (params.use.acc_awb) {
+		fprintf(stderr, "\n**** AWB parameters ****\n");
+		displayGrid(&params.acc_param.awb.config.grid, "awb");
+	}
+	if (params.use.acc_awb_fr) {
+		fprintf(stderr, "\n**** AWB filter response parameters ****\n");
+		displayGrid(&params.acc_param.awb_fr.grid_cfg, "awb_fr");
+	}
 
-	fprintf(stderr, "\n**** AF parameters ****\n");
-	displayGrid(&params.acc_param.af.grid_cfg, "af");
-	displayAfFilter(&params);
+	if (params.use.acc_af) {
+		fprintf(stderr, "\n**** AF parameters ****\n");
+		displayGrid(&params.acc_param.af.grid_cfg, "af");
+		displayAfFilter(&params);
+	}
 
 	close(in_fd);
 
