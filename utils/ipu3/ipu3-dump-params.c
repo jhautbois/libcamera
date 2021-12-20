@@ -77,6 +77,51 @@ static void displayAfFilter(struct ipu3_uapi_params *params)
 		filter.y_calc.y_gen_rate_gb, filter.y_calc.y_gen_rate_b);
 }
 
+static void displayLinLut(struct ipu3_uapi_params *params)
+{
+	struct ipu3_uapi_isp_lin_vmem_params linlut = params->lin_vmem_params;
+
+	/* Gr */
+	fprintf(stderr, "Linearization look-up table for Gr channel interpolation:\n");
+	fprintf(stderr, "{ ");
+	for (unsigned int index = 0; index < IPU3_UAPI_LIN_LUT_SIZE; index++) {
+		if (index % (IPU3_UAPI_LIN_LUT_SIZE / 8) == 0)
+			fprintf(stderr, "\n");
+		fprintf(stderr, " %d,", linlut.lin_lutlow_gr[index]);
+	}
+	fprintf(stderr, "\b }\n");
+
+	/* R */
+	fprintf(stderr, "\nLinearization look-up table for R channel interpolation:\n");
+	fprintf(stderr, "{ ");
+	for (unsigned int index = 0; index < IPU3_UAPI_LIN_LUT_SIZE; index++) {
+		if (index % (IPU3_UAPI_LIN_LUT_SIZE / 8) == 0)
+			fprintf(stderr, "\n");
+		fprintf(stderr, " %d,", linlut.lin_lutlow_r[index]);
+	}
+	fprintf(stderr, "\b }\n");
+
+	/* Gb */
+	fprintf(stderr, "\nLinearization look-up table for Gb channel interpolation:\n");
+	fprintf(stderr, "{ ");
+	for (unsigned int index = 0; index < IPU3_UAPI_LIN_LUT_SIZE; index++) {
+		if (index % (IPU3_UAPI_LIN_LUT_SIZE / 8) == 0)
+			fprintf(stderr, "\n");
+		fprintf(stderr, " %d,", linlut.lin_lutlow_gb[index]);
+	}
+	fprintf(stderr, "\b }\n");
+
+	/* B */
+	fprintf(stderr, "\nLinearization look-up table for B channel interpolation:\n");
+	fprintf(stderr, "{ ");
+	for (unsigned int index = 0; index < IPU3_UAPI_LIN_LUT_SIZE; index++) {
+		if (index % (IPU3_UAPI_LIN_LUT_SIZE / 8) == 0)
+			fprintf(stderr, "\n");
+		fprintf(stderr, " %d,", linlut.lin_lutlow_b[index]);
+	}
+	fprintf(stderr, "\b }\n");
+}
+
 int main(int argc, char *argv[])
 {
 	int in_fd;
@@ -119,6 +164,11 @@ start:
 		fprintf(stderr, "\n**** AF parameters ****\n");
 		displayGrid(&params.acc_param.af.grid_cfg, "af");
 		displayAfFilter(&params);
+	}
+
+	if (params.use.lin_vmem_params) {
+		fprintf(stderr, "\n**** Linearization parameters ****\n");
+		displayLinLut(&params);
 	}
 
 	close(in_fd);
