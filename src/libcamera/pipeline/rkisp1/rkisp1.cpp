@@ -178,6 +178,7 @@ private:
 	std::unique_ptr<V4L2Subdevice> isp_;
 	std::unique_ptr<V4L2VideoDevice> param_;
 	std::unique_ptr<V4L2VideoDevice> stat_;
+	std::unique_ptr<V4L2Subdevice> csi_;
 
 	RkISP1MainPath mainPath_;
 	RkISP1SelfPath selfPath_;
@@ -581,6 +582,10 @@ int PipelineHandlerRkISP1::configure(Camera *camera, CameraConfiguration *c)
 
 	LOG(RkISP1, Debug) << "Sensor configured with " << format;
 
+	ret = csi_->setFormat(0, &format);
+	if (ret < 0)
+		return ret;
+
 	ret = isp_->setFormat(0, &format);
 	if (ret < 0)
 		return ret;
@@ -882,7 +887,7 @@ int PipelineHandlerRkISP1::initLinks(Camera *camera,
 	 * Configure the sensor links: enable the link corresponding to this
 	 * camera.
 	 */
-	const MediaPad *pad = isp_->entity()->getPadByIndex(0);
+	const MediaPad *pad = csi_->entity()->getPadByIndex(0);
 	for (MediaLink *link : pad->links()) {
 		if (link->source()->entity() != sensor->entity())
 			continue;
@@ -891,6 +896,16 @@ int PipelineHandlerRkISP1::initLinks(Camera *camera,
 			<< "Enabling link from sensor '"
 			<< link->source()->entity()->name()
 			<< "' to ISP";
+
+		ret = link->setEnabled(true);
+		if (ret < 0)
+			return ret;
+	}
+
+	const MediaPad *ispPad = isp_->entity()->getPadByIndex(0);
+	for (MediaLink *link : ispPad->links()) {
+		if (link->source()->entity() != csi_->entity())
+			continue;
 
 		ret = link->setEnabled(true);
 		if (ret < 0)
@@ -975,6 +990,7 @@ bool PipelineHandlerRkISP1::match(DeviceEnumerator *enumerator)
 	dm.add("rkisp1_isp");
 	dm.add("rkisp1_resizer_selfpath");
 	dm.add("rkisp1_resizer_mainpath");
+	dm.add("rkisp1_csi");
 	dm.add("rkisp1_selfpath");
 	dm.add("rkisp1_mainpath");
 	dm.add("rkisp1_stats");
@@ -993,6 +1009,10 @@ bool PipelineHandlerRkISP1::match(DeviceEnumerator *enumerator)
 	/* Create the V4L2 subdevices we will need. */
 	isp_ = V4L2Subdevice::fromEntityName(media_, "rkisp1_isp");
 	if (isp_->open() < 0)
+		return false;
+
+	csi_ = V4L2Subdevice::fromEntityName(media_, "rkisp1_csi");
+	if (csi_->open() < 0)
 		return false;
 
 	/* Locate and open the stats and params video nodes. */
@@ -1020,7 +1040,7 @@ bool PipelineHandlerRkISP1::match(DeviceEnumerator *enumerator)
 	 * Enumerate all sensors connected to the ISP and create one
 	 * camera instance for each of them.
 	 */
-	pad = isp_->entity()->getPadByIndex(0);
+	pad = csi_->entity()->getPadByIndex(0);
 	if (!pad)
 		return false;
 
