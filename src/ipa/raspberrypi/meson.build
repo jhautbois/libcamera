@@ -19,6 +19,7 @@ rpi_ipa_sources = files([
     'md_parser_smia.cpp',
     'cam_helper.cpp',
     'cam_helper_ov5647.cpp',
+    'cam_helper_ov5670.cpp',
     'cam_helper_imx219.cpp',
     'cam_helper_imx290.cpp',
     'cam_helper_imx296.cpp',
