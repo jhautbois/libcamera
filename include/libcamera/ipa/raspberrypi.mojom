@@ -126,4 +126,5 @@ interface IPARPiEventInterface {
 	embeddedComplete(uint32 bufferId);
 	setIspControls(libcamera.ControlList controls);
 	setDelayedControls(libcamera.ControlList controls);
+	setLensControls(libcamera.ControlList controls);
 };
