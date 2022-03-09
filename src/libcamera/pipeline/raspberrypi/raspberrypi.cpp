@@ -33,6 +33,7 @@
 
 #include "libcamera/internal/bayer_format.h"
 #include "libcamera/internal/camera.h"
+#include "libcamera/internal/camera_lens.h"
 #include "libcamera/internal/camera_sensor.h"
 #include "libcamera/internal/delayed_controls.h"
 #include "libcamera/internal/device_enumerator.h"
@@ -202,6 +203,7 @@ public:
 	void setIspControls(const ControlList &controls);
 	void setDelayedControls(const ControlList &controls);
 	void setSensorControls(ControlList &controls);
+	void setLensControls(const ControlList &controls);
 
 	/* bufferComplete signal handlers. */
 	void unicamBufferDequeue(FrameBuffer *buffer);
@@ -1483,6 +1485,7 @@ int RPiCameraData::loadIPA(ipa::RPi::SensorConfig *sensorConfig)
 	ipa_->embeddedComplete.connect(this, &RPiCameraData::embeddedComplete);
 	ipa_->setIspControls.connect(this, &RPiCameraData::setIspControls);
 	ipa_->setDelayedControls.connect(this, &RPiCameraData::setDelayedControls);
+	ipa_->setLensControls.connect(this, &RPiCameraData::setLensControls);
 
 	/*
 	 * The configuration (tuning file) is made from the sensor name unless
@@ -1518,6 +1521,10 @@ int RPiCameraData::configureIPA(const CameraConfiguration *config)
 
 	entityControls.emplace(0, sensor_->controls());
 	entityControls.emplace(1, isp_[Isp::Input].dev()->controls());
+
+	CameraLens *lens = sensor_->focusLens();
+	if (lens)
+		entityControls.emplace(2, lens->controls());
 
 	/* Always send the user transform to the IPA. */
 	ipaConfig.transform = static_cast<unsigned int>(config->transform);
@@ -1732,6 +1739,14 @@ void RPiCameraData::setDelayedControls(const ControlList &controls)
 {
 	if (!delayedCtrls_->push(controls))
 		LOG(RPI, Error) << "V4L2 DelayedControl set failed";
+	handleState();
+}
+
+void RPiCameraData::setLensControls(const ControlList &controls)
+{
+	ControlList ctrls = controls;
+
+	sensor_->focusLens()->setFocusPosition(ctrls.get(V4L2_CID_FOCUS_ABSOLUTE).get<int32_t>());
 	handleState();
 }
 
