@@ -1092,14 +1092,14 @@ void IPARPi::processStats(unsigned int bufferId)
 		setDelayedControls.emit(ctrls);
 	}
 
-	/*
-	 * Set the focus position
-	 * \todo Use an AF algorithm and replace the arbitrary value
-	 */
-	ControlList lensCtrls(lensCtrls_);
-	lensCtrls.set(V4L2_CID_FOCUS_ABSOLUTE, static_cast<int32_t>(123));
-	setLensControls.emit(lensCtrls);
-
+	struct FocusStatus focusStatus;
+	if (rpiMetadata_.Get("focus.status", focusStatus) == 0) {
+		/* Set the focus position */
+		ControlList lensCtrls(lensCtrls_);
+		lensCtrls.set(V4L2_CID_FOCUS_ABSOLUTE,
+			      static_cast<int32_t>(focusStatus.focus));
+		setLensControls.emit(lensCtrls);
+	}
 }
 
 void IPARPi::applyAWB(const struct AwbStatus *awbStatus, ControlList &ctrls)
