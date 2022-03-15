@@ -29,6 +29,7 @@ rpi_ipa_sources = files([
     'controller/controller.cpp',
     'controller/histogram.cpp',
     'controller/algorithm.cpp',
+    'controller/iob/af.cpp',
     'controller/rpi/alsc.cpp',
     'controller/rpi/awb.cpp',
     'controller/rpi/sharpen.cpp',
