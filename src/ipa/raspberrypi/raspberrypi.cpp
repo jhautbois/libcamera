@@ -30,6 +30,7 @@
 
 #include "libcamera/internal/mapped_framebuffer.h"
 
+#include "af_status.h"
 #include "agc_algorithm.hpp"
 #include "agc_status.h"
 #include "alsc_status.h"
@@ -110,6 +111,7 @@ private:
 	void setMode(const IPACameraSensorInfo &sensorInfo);
 	bool validateSensorControls();
 	bool validateIspControls();
+	bool validateLensControls();
 	void queueRequest(const ControlList &controls);
 	void returnEmbeddedBuffer(unsigned int bufferId);
 	void prepareISP(const ISPConfig &data);
@@ -134,6 +136,7 @@ private:
 
 	ControlInfoMap sensorCtrls_;
 	ControlInfoMap ispCtrls_;
+	ControlInfoMap lensCtrls_;
 	ControlList libcameraMetadata_;
 
 	/* Camera sensor params. */
@@ -346,13 +349,21 @@ int IPARPi::configure(const IPACameraSensorInfo &sensorInfo,
 		      const IPAConfig &ipaConfig,
 		      ControlList *controls)
 {
-	if (entityControls.size() != 2) {
+	if (entityControls.size() < 2) {
 		LOG(IPARPI, Error) << "No ISP or sensor controls found.";
 		return -1;
 	}
 
 	sensorCtrls_ = entityControls.at(0);
 	ispCtrls_ = entityControls.at(1);
+
+	/* Lens may not be present, don't make it an hard assumption. */
+	auto lensControl = entityControls.find(2);
+	if (lensControl != entityControls.end()) {
+		lensCtrls_ = lensControl->second;
+		if (!validateLensControls())
+			LOG(IPARPI, Error) << "Lens control validation failed.";
+	}
 
 	if (!validateSensorControls()) {
 		LOG(IPARPI, Error) << "Sensor control validation failed.";
@@ -574,6 +585,23 @@ bool IPARPi::validateIspControls()
 	for (auto c : ctrls) {
 		if (ispCtrls_.find(c) == ispCtrls_.end()) {
 			LOG(IPARPI, Error) << "Unable to find ISP control "
+					   << utils::hex(c);
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool IPARPi::validateLensControls()
+{
+	static const uint32_t ctrls[] = {
+		V4L2_CID_FOCUS_ABSOLUTE,
+	};
+
+	for (auto c : ctrls) {
+		if (lensCtrls_.find(c) == lensCtrls_.end()) {
+			LOG(IPARPI, Error) << "Unable to find lens control "
 					   << utils::hex(c);
 			return false;
 		}
@@ -1069,6 +1097,14 @@ void IPARPi::processStats(unsigned int bufferId)
 		applyAGC(&agcStatus, ctrls);
 
 		setDelayedControls.emit(ctrls);
+	}
+
+	struct AfStatus afStatus;
+	if (rpiMetadata_.Get("iob.af", afStatus) == 0) {
+		ControlList lensCtrls(lensCtrls_);
+		lensCtrls.set(V4L2_CID_FOCUS_ABSOLUTE,
+			      static_cast<int32_t>(afStatus.lensPosition));
+		setLensControls.emit(lensCtrls);
 	}
 }
 
