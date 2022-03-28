@@ -9,10 +9,6 @@
 // The AWB algorithm places its results into both the image and global metadata,
 // under the tag "awb.status".
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 struct AwbStatus {
 	char mode[32];
 	double temperature_K;
@@ -20,7 +16,3 @@ struct AwbStatus {
 	double gain_g;
 	double gain_b;
 };
-
-#ifdef __cplusplus
-}
-#endif

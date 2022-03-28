@@ -9,10 +9,6 @@
 // The "contrast" algorithm creates a gamma curve, optionally doing a little bit
 // of contrast stretching based on the AGC histogram.
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #define CONTRAST_NUM_POINTS 33
 
 struct ContrastPoint {
@@ -25,7 +21,3 @@ struct ContrastStatus {
 	double brightness;
 	double contrast;
 };
-
-#ifdef __cplusplus
-}
-#endif

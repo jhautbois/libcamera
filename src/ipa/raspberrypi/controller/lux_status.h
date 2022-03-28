@@ -15,15 +15,7 @@
 // "current_aperture" value if it wishes, which would be used in place of the
 // (presumably meaningless) value in the image metadata.
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 struct LuxStatus {
 	double lux;
 	double aperture;
 };
-
-#ifdef __cplusplus
-}
-#endif

@@ -10,11 +10,6 @@
 
 // The AGC algorithm should post the following structure into the image's
 // "agc.status" metadata.
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 // Note: total_exposure_value will be reported as zero until the algorithm has
 // seen statistics and calculated meaningful values. The contents should be
 // ignored until then.
@@ -35,7 +30,3 @@ struct AgcStatus {
 	double digital_gain;
 	int locked;
 };
-
-#ifdef __cplusplus
-}
-#endif

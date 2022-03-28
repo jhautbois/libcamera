@@ -12,15 +12,7 @@
 // "focus.status" metadata. Recall that it's only reporting focus (contrast)
 // measurements, it's not driving any kind of auto-focus algorithm!
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 struct FocusStatus {
 	unsigned int num;
 	uint32_t focus_measures[FOCUS_REGIONS];
 };
-
-#ifdef __cplusplus
-}
-#endif
