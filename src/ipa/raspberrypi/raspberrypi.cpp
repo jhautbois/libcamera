@@ -54,6 +54,7 @@
 #include "noise_status.h"
 #include "sharpen_algorithm.hpp"
 #include "sharpen_status.h"
+#include "vcm_helper.h"
 
 namespace libcamera {
 
@@ -145,6 +146,7 @@ private:
 
 	/* Raspberry Pi controller specific defines. */
 	std::unique_ptr<RPiController::CamHelper> helper_;
+	std::unique_ptr<RPiController::VcmHelper> vcmHelper_;
 	RPiController::Controller controller_;
 	RPiController::Metadata rpiMetadata_;
 
@@ -196,6 +198,12 @@ int IPARPi::init(const IPASettings &settings, SensorConfig *sensorConfig)
 		LOG(IPARPI, Error) << "Could not create camera helper for "
 				   << settings.sensorModel;
 		return -EINVAL;
+	}
+
+	vcmHelper_ = std::unique_ptr<RPiController::VcmHelper>(RPiController::VcmHelper::Create(settings.vcmModel));
+	if (!vcmHelper_) {
+		LOG(IPARPI, Error) << "Could not create vcm helper for "
+				   << settings.sensorModel;
 	}
 
 	/*
