@@ -281,9 +281,17 @@ struct IPABuffer {
  *
  * Provides the sensor model name to the IPA.
  */
+
+/**
+ * \var IPASettings::vcmModel
+ * \brief The vcm model name
+ *
+ * Provides the vcm model name to the IPA.
+ */
 struct IPASettings {
 	string configurationFile;
 	string sensorModel;
+	string vcmModel;
 };
 
 /**

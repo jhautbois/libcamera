@@ -1552,7 +1552,7 @@ int RPiCameraData::loadIPA(ipa::RPi::SensorConfig *sensorConfig)
 	else
 		configurationFile = std::string(configFromEnv);
 
-	IPASettings settings(configurationFile, sensor_->model());
+	IPASettings settings(configurationFile, sensor_->model(), sensor_->focusLens()->model());
 
 	return ipa_->init(settings, sensorConfig);
 }

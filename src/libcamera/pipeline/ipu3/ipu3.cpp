@@ -1245,8 +1245,8 @@ int IPU3CameraData::loadIPA()
 	if (ret)
 		return ret;
 
-	ret = ipa_->init(IPASettings{ "", sensor->model() }, sensorInfo,
-			 sensor->controls(), &ipaControls_);
+	ret = ipa_->init(IPASettings{ "", sensor->model(), sensor->focusLens()->model() },
+			 sensorInfo, sensor->controls(), &ipaControls_);
 	if (ret) {
 		LOG(IPU3, Error) << "Failed to initialise the IPU3 IPA";
 		return ret;

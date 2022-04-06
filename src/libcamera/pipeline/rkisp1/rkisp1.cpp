@@ -321,7 +321,7 @@ int RkISP1CameraData::loadIPA(unsigned int hwRevision)
 	ipa_->paramsBufferReady.connect(this, &RkISP1CameraData::paramFilled);
 	ipa_->metadataReady.connect(this, &RkISP1CameraData::metadataReady);
 
-	int ret = ipa_->init(IPASettings{ "", sensor_->model() }, hwRevision);
+	int ret = ipa_->init(IPASettings{ "", sensor_->model(), "" }, hwRevision);
 	if (ret < 0) {
 		LOG(RkISP1, Error) << "IPA initialization failure";
 		return ret;
