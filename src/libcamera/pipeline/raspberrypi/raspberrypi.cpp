@@ -42,6 +42,7 @@
 #include "libcamera/internal/media_device.h"
 #include "libcamera/internal/pipeline_handler.h"
 #include "libcamera/internal/v4l2_videodevice.h"
+#include "libcamera/internal/sysfs.h"
 
 #include "dma_heaps.h"
 #include "rpi_stream.h"
@@ -333,7 +334,7 @@ public:
 
 	int queueRequestDevice(Camera *camera, Request *request) override;
 
-	bool match(DeviceEnumerator *enumerator) override;
+	bool match(DeviceEnumerator *enumerator, std::string cameraName) override;
 
 private:
 	RPiCameraData *cameraData(Camera *camera)
@@ -1132,7 +1133,7 @@ int PipelineHandlerRPi::queueRequestDevice(Camera *camera, Request *request)
 	return 0;
 }
 
-bool PipelineHandlerRPi::match(DeviceEnumerator *enumerator)
+bool PipelineHandlerRPi::match(DeviceEnumerator *enumerator, std::string cameraName)
 {
 	DeviceMatch unicam("unicam");
 	MediaDevice *unicamDevice = acquireMediaDevice(enumerator, unicam);
@@ -1159,6 +1160,22 @@ bool PipelineHandlerRPi::match(DeviceEnumerator *enumerator)
 	for (MediaEntity *entity : unicamDevice->entities()) {
 		if (entity->function() != MEDIA_ENT_F_CAM_SENSOR)
 			continue;
+
+		{
+			auto subdev = std::make_unique<V4L2Subdevice>(entity);
+			int ret = subdev->open();
+			if (ret < 0)
+				return ret;
+
+			auto id = sysfs::firmwareNodePath(subdev->devicePath());
+			subdev->close();
+
+			LOG(Error) << "camera name: " << cameraName;
+			LOG(Error) << "camera id: " << id;
+
+			if ((cameraName != "") && (cameraName != id))
+				continue;
+		}
 
 		int ret = registerCamera(unicamDevice, ispDevice, entity);
 		if (ret)

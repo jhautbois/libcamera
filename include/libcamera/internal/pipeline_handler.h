@@ -41,7 +41,7 @@ public:
 	PipelineHandler(CameraManager *manager);
 	virtual ~PipelineHandler();
 
-	virtual bool match(DeviceEnumerator *enumerator) = 0;
+	virtual bool match(DeviceEnumerator *enumerator, std::string cameraName) = 0;
 	MediaDevice *acquireMediaDevice(DeviceEnumerator *enumerator,
 					const DeviceMatch &dm);
 

@@ -38,7 +38,7 @@ class CameraManager::Private : public Extensible::Private, public Thread
 	LIBCAMERA_DECLARE_PUBLIC(CameraManager)
 
 public:
-	Private();
+	Private(std::string cameraName);
 
 	int start();
 	void addCamera(std::shared_ptr<Camera> camera,
@@ -71,10 +71,12 @@ private:
 
 	IPAManager ipaManager_;
 	ProcessManager processManager_;
+
+	std::string cameraName_;
 };
 
-CameraManager::Private::Private()
-	: initialized_(false)
+CameraManager::Private::Private(std::string cameraName)
+	: initialized_(false), cameraName_(cameraName)
 {
 }
 
@@ -155,7 +157,7 @@ void CameraManager::Private::createPipelineHandlers()
 		 */
 		while (1) {
 			std::shared_ptr<PipelineHandler> pipe = factory->create(o);
-			if (!pipe->match(enumerator_.get()))
+			if (!pipe->match(enumerator_.get(), cameraName_))
 				break;
 
 			LOG(Camera, Debug)
@@ -256,8 +258,13 @@ void CameraManager::Private::removeCamera(Camera *camera)
 
 CameraManager *CameraManager::self_ = nullptr;
 
-CameraManager::CameraManager()
-	: Extensible(std::make_unique<CameraManager::Private>())
+CameraManager::CameraManager():
+	CameraManager("")
+{
+}
+
+CameraManager::CameraManager(std::string cameraName)
+	: Extensible(std::make_unique<CameraManager::Private>(cameraName))
 {
 	if (self_)
 		LOG(Camera, Fatal)

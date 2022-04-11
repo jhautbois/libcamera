@@ -25,6 +25,7 @@ class CameraManager : public Object, public Extensible
 	LIBCAMERA_DECLARE_PRIVATE()
 public:
 	CameraManager();
+	CameraManager(std::string cameraName);
 	~CameraManager();
 
 	int start();

@@ -96,7 +96,7 @@ public:
 
 	int queueRequestDevice(Camera *camera, Request *request) override;
 
-	bool match(DeviceEnumerator *enumerator) override;
+	bool match(DeviceEnumerator *enumerator, std::string name = "") override;
 
 private:
 	int processControls(VimcCameraData *data, Request *request);
@@ -438,7 +438,7 @@ int PipelineHandlerVimc::queueRequestDevice(Camera *camera, Request *request)
 	return 0;
 }
 
-bool PipelineHandlerVimc::match(DeviceEnumerator *enumerator)
+bool PipelineHandlerVimc::match(DeviceEnumerator *enumerator, [[maybe_unused]] std::string name)
 {
 	DeviceMatch dm("vimc");
 
