@@ -1161,7 +1161,7 @@ bool PipelineHandlerRPi::match(DeviceEnumerator *enumerator, std::string cameraN
 		if (entity->function() != MEDIA_ENT_F_CAM_SENSOR)
 			continue;
 
-		{
+		if (cameraName != "") {
 			auto subdev = std::make_unique<V4L2Subdevice>(entity);
 			int ret = subdev->open();
 			if (ret < 0)
@@ -1170,10 +1170,19 @@ bool PipelineHandlerRPi::match(DeviceEnumerator *enumerator, std::string cameraN
 			auto id = sysfs::firmwareNodePath(subdev->devicePath());
 			subdev->close();
 
-			LOG(Error) << "camera name: " << cameraName;
-			LOG(Error) << "camera id: " << id;
+			const std::string mux0 = "smtrx_mux@0";
+			const std::string mux1 = "smtrx_mux@1";
+			bool found = false;
 
-			if ((cameraName != "") && (cameraName != id))
+			cameraName.replace(6, 11, mux0);
+			if (cameraName == id)
+				found = true;
+
+			cameraName.replace(6, 11, mux1);
+			if (cameraName == id)
+				found = true;
+
+			if (!found)
 				continue;
 		}
 
