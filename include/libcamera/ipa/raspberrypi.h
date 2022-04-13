@@ -45,7 +45,8 @@ static const ControlInfoMap Controls({
 		{ &controls::ColourCorrectionMatrix, ControlInfo(-16.0f, 16.0f) },
 		{ &controls::ScalerCrop, ControlInfo(Rectangle{}, Rectangle(65535, 65535, 65535, 65535), Rectangle{}) },
 		{ &controls::FrameDurationLimits, ControlInfo(INT64_C(1000), INT64_C(1000000000)) },
-		{ &controls::draft::NoiseReductionMode, ControlInfo(controls::draft::NoiseReductionModeValues) }
+		{ &controls::draft::NoiseReductionMode, ControlInfo(controls::draft::NoiseReductionModeValues) },
+		{ &controls::draft::AfLensRange, ControlInfo(0, 1023, 1023) },
 	}, controls::controls);
 
 } /* namespace RPi */
