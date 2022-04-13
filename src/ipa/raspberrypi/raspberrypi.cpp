@@ -545,6 +545,11 @@ void IPARPi::reportMetadata()
 			m[i] = ccmStatus->matrix[i];
 		libcameraMetadata_.set(controls::ColourCorrectionMatrix, m);
 	}
+
+	AfStatus *afStatus = rpiMetadata_.GetLocked<AfStatus>("af.status");
+	if (afStatus) {
+		libcameraMetadata_.set(controls::AfState, afStatus->state);
+	}
 }
 
 bool IPARPi::validateSensorControls()
