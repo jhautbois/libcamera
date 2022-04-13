@@ -934,4 +934,13 @@ controls:
             value. All of the custom test patterns will be static (that is the
             raw image must not vary from frame to frame).
 
+  - AfLensRange:
+      type: int32_t
+      draft: true
+      description:
+        Specify to the AF algorithm the lens movement range.
+        \todo Define units
+
+      size: [2]
+
 ...
