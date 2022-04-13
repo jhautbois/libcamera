@@ -241,7 +241,8 @@ def create_requests(ctx):
 def start(ctx):
 	camera = ctx["camera"]
 
-	camera.start()
+	ctrls = {"AfLensRange": (220, 670)}
+	camera.start(ctrls)
 
 def stop(ctx):
 	camera = ctx["camera"]
