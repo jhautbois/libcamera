@@ -1100,7 +1100,7 @@ void IPARPi::processStats(unsigned int bufferId)
 	}
 
 	struct AfStatus afStatus;
-	if (rpiMetadata_.Get("iob.af", afStatus) == 0) {
+	if (rpiMetadata_.Get("af.status", afStatus) == 0) {
 		ControlList lensCtrls(lensCtrls_);
 		lensCtrls.set(V4L2_CID_FOCUS_ABSOLUTE,
 			      static_cast<int32_t>(afStatus.lensPosition));
