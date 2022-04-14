@@ -30,6 +30,7 @@
 
 #include "libcamera/internal/mapped_framebuffer.h"
 
+#include "af_algorithm.hpp"
 #include "af_status.h"
 #include "agc_algorithm.hpp"
 #include "agc_status.h"
@@ -945,6 +946,20 @@ void IPARPi::queueRequest(const ControlList &controls)
 				LOG(IPARPI, Error) << "Noise reduction mode " << idx
 						   << " not recognised";
 			}
+			break;
+		}
+
+		case controls::AF_LENS_RANGE: {
+			RPiController::AfAlgorithm *af = dynamic_cast<RPiController::AfAlgorithm *>(
+			        controller_.GetAlgorithm("iob.af"));
+			if (!af) {
+			        LOG(IPARPI, Warning)
+			                << "Could not set lens range - no AF algorithm";
+			        break;
+			}
+
+			auto lensRange = ctrl.second.get<Span<const int32_t>>();
+			af->SetRange(lensRange[0], lensRange[1]);
 			break;
 		}
 
