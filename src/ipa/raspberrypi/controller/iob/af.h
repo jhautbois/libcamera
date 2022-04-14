@@ -27,7 +27,7 @@ public:
 	void Trigger() override;
 	void Cancel() override;
 	void SetWindows(const libcamera::Rectangle &afWindows) override;
-	void SetRange(const uint32_t &range) override;
+	void SetRange(const uint32_t &low, const uint32_t &high) override;
 	void setSpeed(const uint32_t &speed) override;
 private:
 	bool afNeedIgnoreFrame();
@@ -57,6 +57,9 @@ private:
 	bool fineCompleted_;
 
 	uint32_t mode_;
+
+	uint32_t lowStep_;
+	uint32_t highStep_;
 };
 
 } /* namespace RPiController */

@@ -25,7 +25,7 @@ public:
 	// set AF windows
 	virtual void SetWindows(const libcamera::Rectangle &afWindows) = 0;
 	// set AF range
-	virtual void SetRange(const uint32_t &range) = 0;
+	virtual void SetRange(const uint32_t &low, const uint32_t &high) = 0;
 	// set AF speed
 	virtual void setSpeed(const uint32_t &speed) = 0;
 };

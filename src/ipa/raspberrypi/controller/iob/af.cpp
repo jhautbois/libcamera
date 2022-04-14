@@ -40,7 +40,7 @@ Af::Af(Controller *controller)
 	: AfAlgorithm(controller), focus_(0), bestFocus_(0),
 	  currentContrast_(0.0), previousContrast_(0.0), maxContrast_(0.0),
 	  maxStep_(0), coarseCompleted_(false), fineCompleted_(false),
-	  mode_(0)
+	  mode_(0), lowStep_(0), highStep_(kMaxFocusSteps)
 {
 }
 
@@ -66,8 +66,16 @@ void Af::SetWindows([[maybe_unused]] const libcamera::Rectangle &afWindows)
 {
 }
 
-void Af::SetRange([[maybe_unused]] const uint32_t &range)
+void Af::SetRange(const uint32_t &low, const uint32_t &high)
 {
+	lowStep_ = low;
+	highStep_ = high;
+
+	LOG(IoBAf, Debug) << "Lens range set between " << lowStep_
+			  << " and " << highStep_;
+
+	focus_ = lowStep_;
+	maxStep_ = highStep_;
 }
 
 void Af::setSpeed([[maybe_unused]] const uint32_t &speed)
@@ -98,7 +106,7 @@ void Af::afCoarseScan()
 		status_.lensPosition = focus_;
 		previousContrast_ = 0;
 		maxStep_ = std::clamp(focus_ + static_cast<uint32_t>((focus_ * kFineRange)),
-				      0U, kMaxFocusSteps);
+				      0U, highStep_);
 	}
 }
 
@@ -115,7 +123,7 @@ void Af::afFineScan()
 
 bool Af::afScan(uint32_t minSteps)
 {
-	if (focus_ > maxStep_) {
+	if (focus_ + minSteps > maxStep_) {
 		/* If the max step is reached, move lens to the position. */
 		status_.lensPosition = bestFocus_;
 		return true;
@@ -158,13 +166,13 @@ bool Af::afScan(uint32_t minSteps)
 
 void Af::afReset()
 {
-	status_.lensPosition = 0;
-	focus_ = 0;
+	status_.lensPosition = lowStep_;
+	focus_ = lowStep_;
+	maxStep_ = highStep_;
 	status_.state = 0;
 	previousContrast_ = 0.0;
 	coarseCompleted_ = false;
 	fineCompleted_ = false;
-	maxStep_ = kMaxFocusSteps;
 	maxContrast_ = 0.0;
 }
 
