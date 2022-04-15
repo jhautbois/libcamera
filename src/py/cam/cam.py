@@ -238,10 +238,18 @@ def create_requests(ctx):
 
 	ctx["requests"] = requests
 
+def convert_area(area):
+	return (int(area[0] * 2000 / 2956 - 1000),
+		int(area[1] * 2000 / 1944 - 1000),
+		int(area[2] * 2000 / 2956 - 1000),
+		int(area[3] * 2000 / 1944 - 1000))
+
 def start(ctx):
 	camera = ctx["camera"]
-
-	ctrls = {"AfLensRange": (220, 670)}
+	area = convert_area((739, 486, 2217, 1458))
+	print(area)
+	ctrls = {"AfLensRange": (220, 670),
+		 "AfWindows": area}
 	camera.start(ctrls)
 
 def stop(ctx):
