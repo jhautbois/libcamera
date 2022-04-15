@@ -47,6 +47,7 @@ static const ControlInfoMap Controls({
 		{ &controls::FrameDurationLimits, ControlInfo(INT64_C(1000), INT64_C(1000000000)) },
 		{ &controls::draft::NoiseReductionMode, ControlInfo(controls::draft::NoiseReductionModeValues) },
 		{ &controls::draft::AfLensRange, ControlInfo(0, 1023, 1023) },
+		{ &controls::AfState, ControlInfo(controls::AfStateValues) },
 	}, controls::controls);
 
 } /* namespace RPi */

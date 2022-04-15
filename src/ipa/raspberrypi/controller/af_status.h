@@ -7,6 +7,7 @@
  */
 #pragma once
 
+#include <libcamera/control_ids.h>
 #include <libcamera/geometry.h>
 
 /*
@@ -16,6 +17,6 @@
 
 struct AfStatus {
 	uint32_t lensPosition;
-	uint32_t state;
+	libcamera::controls::AfStateEnum state;
 	libcamera::Rectangle windows;
 };

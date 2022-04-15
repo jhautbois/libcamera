@@ -86,7 +86,7 @@ void Af::Initialise()
 {
 	status_.lensPosition = 0.0;
 	maxContrast_ = 0.0;
-	status_.state = 1;
+	status_.state = libcamera::controls::AfStateAuto;
 }
 
 void Af::Prepare(Metadata *image_metadata)
@@ -116,7 +116,7 @@ void Af::afFineScan()
 		return;
 
 	if (afScan(kFineSearchStep)) {
-		status_.state = 2;
+		status_.state = libcamera::controls::AfStateAutoFocused;
 		fineCompleted_ = true;
 	}
 }
@@ -169,7 +169,7 @@ void Af::afReset()
 	status_.lensPosition = lowStep_;
 	focus_ = lowStep_;
 	maxStep_ = highStep_;
-	status_.state = 0;
+	status_.state = libcamera::controls::AfStateAuto;
 	previousContrast_ = 0.0;
 	coarseCompleted_ = false;
 	fineCompleted_ = false;
@@ -201,7 +201,7 @@ void Af::Process(StatisticsPtr &stats, [[maybe_unused]] Metadata *image_metadata
 		currentContrast_ += stats->focus_stats[i].contrast_val[1][1]
 				  / stats->focus_stats[i].contrast_val_num[1][1];
 
-	if (status_.state != 2) {
+	if (status_.state != libcamera::controls::AfStateAutoFocused) {
 		afCoarseScan();
 		afFineScan();
 	} else {
