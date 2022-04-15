@@ -151,7 +151,7 @@ public:
 
 	int queueRequestDevice(Camera *camera, Request *request) override;
 
-	bool match(DeviceEnumerator *enumerator) override;
+	bool match(DeviceEnumerator *enumerator, std::string cameraName) override;
 
 private:
 	RkISP1CameraData *cameraData(Camera *camera)
@@ -967,7 +967,8 @@ int PipelineHandlerRkISP1::createCamera(MediaEntity *sensor)
 	return 0;
 }
 
-bool PipelineHandlerRkISP1::match(DeviceEnumerator *enumerator)
+bool PipelineHandlerRkISP1::match(DeviceEnumerator *enumerator,
+				  [[maybe_unused]] std::string cameraName)
 {
 	const MediaPad *pad;
 

@@ -281,7 +281,7 @@ public:
 	int start(Camera *camera, const ControlList *controls) override;
 	void stopDevice(Camera *camera) override;
 
-	bool match(DeviceEnumerator *enumerator) override;
+	bool match(DeviceEnumerator *enumerator, std::string cameraName) override;
 
 	V4L2VideoDevice *video(const MediaEntity *entity);
 	V4L2Subdevice *subdev(const MediaEntity *entity);
@@ -1151,7 +1151,8 @@ std::vector<MediaEntity *> SimplePipelineHandler::locateSensors()
 	return sensors;
 }
 
-bool SimplePipelineHandler::match(DeviceEnumerator *enumerator)
+bool SimplePipelineHandler::match(DeviceEnumerator *enumerator,
+				  [[maybe_unused]] std::string cameraName)
 {
 	const SimplePipelineInfo *info = nullptr;
 	unsigned int numStreams = 1;

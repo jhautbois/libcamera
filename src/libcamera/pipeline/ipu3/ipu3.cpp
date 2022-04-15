@@ -146,7 +146,7 @@ public:
 
 	int queueRequestDevice(Camera *camera, Request *request) override;
 
-	bool match(DeviceEnumerator *enumerator) override;
+	bool match(DeviceEnumerator *enumerator, std::string cameraName) override;
 
 private:
 	IPU3CameraData *cameraData(Camera *camera)
@@ -891,7 +891,8 @@ int PipelineHandlerIPU3::queueRequestDevice(Camera *camera, Request *request)
 	return 0;
 }
 
-bool PipelineHandlerIPU3::match(DeviceEnumerator *enumerator)
+bool PipelineHandlerIPU3::match(DeviceEnumerator *enumerator,
+				[[maybe_unused]] std::string cameraName)
 {
 	int ret;
 

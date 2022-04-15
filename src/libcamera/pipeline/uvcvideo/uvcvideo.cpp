@@ -78,7 +78,7 @@ public:
 
 	int queueRequestDevice(Camera *camera, Request *request) override;
 
-	bool match(DeviceEnumerator *enumerator) override;
+	bool match(DeviceEnumerator *enumerator, std::string cameraName) override;
 
 private:
 	std::string generateId(const UVCCameraData *data);
@@ -448,7 +448,8 @@ std::string PipelineHandlerUVC::generateId(const UVCCameraData *data)
 	return controllerId + "-" + usbId + "-" + deviceId;
 }
 
-bool PipelineHandlerUVC::match(DeviceEnumerator *enumerator)
+bool PipelineHandlerUVC::match(DeviceEnumerator *enumerator,
+			       [[maybe_unused]] std::string cameraName)
 {
 	MediaDevice *media;
 	DeviceMatch dm("uvcvideo");
