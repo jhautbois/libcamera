@@ -968,6 +968,20 @@ void IPARPi::queueRequest(const ControlList &controls)
 			break;
 		}
 
+		case controls::AF_WINDOWS: {
+			RPiController::AfAlgorithm *af = dynamic_cast<RPiController::AfAlgorithm *>(
+			        controller_.GetAlgorithm("iob.af"));
+			if (!af) {
+			        LOG(IPARPI, Warning)
+			                << "Could not set lens range - no AF algorithm";
+			        break;
+			}
+
+			auto focusAreas = ctrl.second.get<Rectangle>();
+			af->SetWindows(focusAreas);
+			break;
+		}
+
 		default:
 			LOG(IPARPI, Warning)
 				<< "Ctrl " << controls::controls.at(ctrl.first)->name()

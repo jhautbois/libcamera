@@ -48,6 +48,7 @@ static const ControlInfoMap Controls({
 		{ &controls::draft::NoiseReductionMode, ControlInfo(controls::draft::NoiseReductionModeValues) },
 		{ &controls::draft::AfLensRange, ControlInfo(0, 1023, 1023) },
 		{ &controls::AfState, ControlInfo(controls::AfStateValues) },
+		{ &controls::AfWindows, ControlInfo(Rectangle{-1000, -1000, 1, 1}, Rectangle(1000, 1000, 1000, 1000), Rectangle{-1000, -1000, 1000, 1000}) },
 	}, controls::controls);
 
 } /* namespace RPi */

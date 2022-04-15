@@ -64,6 +64,8 @@ void Af::Cancel()
 
 void Af::SetWindows([[maybe_unused]] const libcamera::Rectangle &afWindows)
 {
+	/* \todo: convert it to the focus area [4x3] */
+	LOG(IoBAf, Debug) << "Area asked: " << afWindows.toString();
 }
 
 void Af::SetRange(const uint32_t &low, const uint32_t &high)
