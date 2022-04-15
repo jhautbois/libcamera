@@ -645,10 +645,9 @@ PYBIND11_MODULE(_libcamera, m)
 		.value("Start", libcamera::controls::draft::AePrecaptureTriggerStart)
 		.value("Cancel", libcamera::controls::draft::AePrecaptureTriggerCancel);
 
-	py::enum_<libcamera::controls::draft::AfTriggerEnum>(m, "AfTrigger")
-		.value("Idle", libcamera::controls::draft::AfTriggerIdle)
-		.value("Start", libcamera::controls::draft::AfTriggerStart)
-		.value("Cancel", libcamera::controls::draft::AfTriggerCancel);
+	py::enum_<libcamera::controls::AfTriggerEnum>(m, "AfTrigger")
+		.value("Start", libcamera::controls::AfTriggerStart)
+		.value("Cancel", libcamera::controls::AfTriggerCancel);
 
 	py::enum_<libcamera::controls::draft::NoiseReductionModeEnum>(m, "NoiseReductionMode")
 		.value("Off", libcamera::controls::draft::NoiseReductionModeOff)
@@ -670,14 +669,19 @@ PYBIND11_MODULE(_libcamera, m)
 		.value("FlashRequired", libcamera::controls::draft::AeStateFlashRequired)
 		.value("Precapture", libcamera::controls::draft::AeStatePrecapture);
 
-	py::enum_<libcamera::controls::draft::AfStateEnum>(m, "AfState")
-		.value("Inactive", libcamera::controls::draft::AfStateInactive)
-		.value("PassiveScan", libcamera::controls::draft::AfStatePassiveScan)
-		.value("PassiveFocused", libcamera::controls::draft::AfStatePassiveFocused)
-		.value("ActiveScan", libcamera::controls::draft::AfStateActiveScan)
-		.value("FocusedLock", libcamera::controls::draft::AfStateFocusedLock)
-		.value("NotFocusedLock", libcamera::controls::draft::AfStateNotFocusedLock)
-		.value("PassiveUnfocused", libcamera::controls::draft::AfStatePassiveUnfocused);
+	py::enum_<libcamera::controls::AfStateEnum>(m, "AfState")
+		.value("Manual", libcamera::controls::AfStateManual)
+		.value("Auto", libcamera::controls::AfStateAuto)
+		.value("AutoScanning", libcamera::controls::AfStateAutoScanning)
+		.value("AutoFocused", libcamera::controls::AfStateAutoFocused)
+		.value("AutoFailed", libcamera::controls::AfStateAutoFailed)
+		.value("ContinuousScanning", libcamera::controls::AfStateContinuousScanning)
+		.value("ContinuousScanningPausing", libcamera::controls::AfStateContinuousScanningPausing)
+		.value("ContinuousScanningPaused", libcamera::controls::AfStateContinuousScanningPaused)
+		.value("ContinuousFocused", libcamera::controls::AfStateContinuousFocused)
+		.value("ContinuousFocusedPaused", libcamera::controls::AfStateContinuousFocusedPaused)
+		.value("ContinuousFailed", libcamera::controls::AfStateContinuousFailed)
+		.value("ContinuousFailedPaused", libcamera::controls::AfStateContinuousFailedPaused);
 
 	py::enum_<libcamera::controls::draft::AwbStateEnum>(m, "AwbState")
 		.value("StateInactive", libcamera::controls::draft::AwbStateInactive)
