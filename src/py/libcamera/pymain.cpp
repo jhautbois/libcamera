@@ -81,6 +81,26 @@ static ControlValue ControlValueMaybeArray(const py::object &ob)
 	return ControlValue(ob.cast<T>());
 }
 
+template<>
+ControlValue ControlValueMaybeArray<Rectangle>([[maybe_unused]] const py::object &ob)
+{
+	try {
+		std::array<int32_t, 4> data = ob.cast<std::array<int32_t, 4>>();
+		return ControlValue(Rectangle(data[0], data[1], data[2], data[3]));
+	} catch (py::cast_error const &e) {
+	}
+
+	auto vec = ob.cast<std::vector<std::array<int32_t, 4>>>();
+	std::vector<Rectangle> rects;
+	for (auto data : vec) {
+		rects.push_back(Rectangle(data[0], data[1],
+				static_cast<unsigned int>(data[2]),
+				static_cast<unsigned int>(data[3])));
+	}
+
+	return ControlValue(Span<Rectangle>(rects));
+}
+
 static ControlValue PyToControlValue(const py::object &ob, ControlType type)
 {
 	switch (type) {
@@ -97,8 +117,7 @@ static ControlValue PyToControlValue(const py::object &ob, ControlType type)
 	case ControlTypeString:
 		return ControlValue(ob.cast<string>());
 	case ControlTypeRectangle: {
-		std::array<int32_t, 4> array = ob.cast<std::array<int32_t, 4>>();
-		return ControlValue(Rectangle(array[0], array[1], array[2], array[3]));
+		return ControlValueMaybeArray<Rectangle>(ob);
 	}
 	case ControlTypeSize: {
 		std::array<int32_t, 2> array = ob.cast<std::array<int32_t, 2>>();

@@ -510,7 +510,7 @@ controls:
         might find the optimal focus position for each one and finally select
         the window closest to the camera.
 
-        size: [platform dependent]
+      size: [platform dependent]
 
   - AfTrigger:
       type: int32_t
