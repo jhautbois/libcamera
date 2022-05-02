@@ -985,8 +985,11 @@ void IPARPi::queueRequest(const ControlList &controls)
 			        break;
 			}
 
-			auto focusAreas = ctrl.second.get<Rectangle>();
-			af->SetWindows(focusAreas);
+			for (auto &focusAreas : ctrl.second.get<Span<const Rectangle>>()) {
+				LOG(IPARPI, Warning) << "Setting focusAreas to " << focusAreas.toString();
+				/* We must be in a [4x3] rectangle, verify bounds */
+				af->SetWindows(focusAreas);
+			}
 			break;
 		}
 
