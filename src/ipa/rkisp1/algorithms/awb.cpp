@@ -91,11 +91,8 @@ void Awb::prepare(IPAContext &context, rkisp1_params_cfg *params)
 
 	/* Configure the measure window for AWB. */
 	params->meas.awb_meas_config.awb_wnd = context.configuration.awb.measureWindow;
-	/*
-	 * Measure Y, Cr and Cb means.
-	 * \todo RGB is not working, the kernel seems to not configure it ?
-	 */
-	params->meas.awb_meas_config.awb_mode = RKISP1_CIF_ISP_AWB_MODE_YCBCR;
+	/* Measure RGB means. */
+	params->meas.awb_meas_config.awb_mode = RKISP1_CIF_ISP_AWB_MODE_RGB;
 	/* Reference Cr and Cb. */
 	params->meas.awb_meas_config.awb_ref_cb = 128;
 	params->meas.awb_meas_config.awb_ref_cr = 128;
