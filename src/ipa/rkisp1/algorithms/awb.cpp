@@ -124,30 +124,39 @@ void Awb::process([[maybe_unused]] IPAContext &context, const rkisp1_stat_buffer
 	const rkisp1_cif_isp_stat *params = &stats->params;
 	const rkisp1_cif_isp_awb_stat *awb = &params->awb;
 	IPAFrameContext &frameContext = context.frameContext;
+	double greenMean;
+	double redMean;
+	double blueMean;
 
-	/* Get the YCbCr mean values */
-	double yMean = awb->awb_mean[0].mean_y_or_g;
-	double crMean = awb->awb_mean[0].mean_cr_or_r;
-	double cbMean = awb->awb_mean[0].mean_cb_or_b;
+	if (params->meas.awb_meas_config.awb_mode == RKISP1_CIF_ISP_AWB_MODE_RGB) {
+		greenMean = awb->awb_mean[0].mean_y_or_g;
+		redMean = awb->awb_mean[0].mean_cr_or_r;
+		blueMean = awb->awb_mean[0].mean_cb_or_b;
+	} else {
+		/* Get the YCbCr mean values */
+		double yMean = awb->awb_mean[0].mean_y_or_g;
+		double crMean = awb->awb_mean[0].mean_cr_or_r;
+		double cbMean = awb->awb_mean[0].mean_cb_or_b;
 
-	/*
-	 * Convert from YCbCr to RGB.
-	 * The hardware uses the following formulas:
-	 * Y = 16 + 0.2500 R + 0.5000 G + 0.1094 B
-	 * Cb = 128 - 0.1406 R - 0.2969 G + 0.4375 B
-	 * Cr = 128 + 0.4375 R - 0.3750 G - 0.0625 B
-	 *
-	 * The inverse matrix is thus:
-	 * [[1,1636, -0,0623,  1,6008]
-	 *  [1,1636, -0,4045, -0,7949]
-	 *  [1,1636,  1,9912, -0,0250]]
-	 */
-	yMean -= 16;
-	cbMean -= 128;
-	crMean -= 128;
-	double redMean = 1.1636 * yMean - 0.0623 * cbMean + 1.6008 * crMean;
-	double greenMean = 1.1636 * yMean - 0.4045 * cbMean - 0.7949 * crMean;
-	double blueMean = 1.1636 * yMean + 1.9912 * cbMean - 0.0250 * crMean;
+		/*
+		 * Convert from YCbCr to RGB.
+		 * The hardware uses the following formulas:
+		 * Y = 16 + 0.2500 R + 0.5000 G + 0.1094 B
+		 * Cb = 128 - 0.1406 R - 0.2969 G + 0.4375 B
+		 * Cr = 128 + 0.4375 R - 0.3750 G - 0.0625 B
+		 *
+		 * The inverse matrix is thus:
+		 * [[1,1636, -0,0623,  1,6008]
+		 *  [1,1636, -0,4045, -0,7949]
+		 *  [1,1636,  1,9912, -0,0250]]
+		 */
+		yMean -= 16;
+		cbMean -= 128;
+		crMean -= 128;
+		redMean = 1.1636 * yMean - 0.0623 * cbMean + 1.6008 * crMean;
+		greenMean = 1.1636 * yMean - 0.4045 * cbMean - 0.7949 * crMean;
+		blueMean = 1.1636 * yMean + 1.9912 * cbMean - 0.0250 * crMean;
+	}
 
 	/* Estimate the red and blue gains to apply in a grey world. */
 	double redGain = greenMean / (redMean + 1);
