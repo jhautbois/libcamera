@@ -16,6 +16,7 @@ endif
 gst_enabled = true
 
 libcamera_gst_sources = [
+    'gstlibcamera-controls.cpp',
     'gstlibcamera-utils.cpp',
     'gstlibcamera.cpp',
     'gstlibcameraallocator.cpp',

@@ -37,10 +37,11 @@
 
 #include <gst/base/base.h>
 
+#include "gstlibcamera-controls.h"
+#include "gstlibcamera-utils.h"
 #include "gstlibcameraallocator.h"
 #include "gstlibcamerapad.h"
 #include "gstlibcamerapool.h"
-#include "gstlibcamera-utils.h"
 
 using namespace libcamera;
 
@@ -128,6 +129,7 @@ struct GstLibcameraSrcState {
 
 	ControlList initControls_;
 	guint group_id_;
+	GstCameraControls controls_;
 
 	int queueRequest();
 	void requestCompleted(Request *request);
@@ -152,7 +154,8 @@ struct _GstLibcameraSrc {
 
 enum {
 	PROP_0,
-	PROP_CAMERA_NAME
+	PROP_CAMERA_NAME,
+	PROP_LAST
 };
 
 G_DEFINE_TYPE_WITH_CODE(GstLibcameraSrc, gst_libcamera_src, GST_TYPE_ELEMENT,
@@ -177,6 +180,9 @@ int GstLibcameraSrcState::queueRequest()
 	std::unique_ptr<Request> request = cam_->createRequest();
 	if (!request)
 		return -ENOMEM;
+
+	/* Apply controls */
+	controls_.applyControls(request);
 
 	std::unique_ptr<RequestWrap> wrap =
 		std::make_unique<RequestWrap>(std::move(request));
@@ -716,6 +722,7 @@ gst_libcamera_src_set_property(GObject *object, guint prop_id,
 {
 	GLibLocker lock(GST_OBJECT(object));
 	GstLibcameraSrc *self = GST_LIBCAMERA_SRC(object);
+	GstLibcameraSrcState *state = self->state;
 
 	switch (prop_id) {
 	case PROP_CAMERA_NAME:
@@ -723,7 +730,8 @@ gst_libcamera_src_set_property(GObject *object, guint prop_id,
 		self->camera_name = g_value_dup_string(value);
 		break;
 	default:
-		G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+		if (!state->controls_.setProperty(prop_id - PROP_LAST, value, pspec))
+			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 		break;
 	}
 }
@@ -734,13 +742,15 @@ gst_libcamera_src_get_property(GObject *object, guint prop_id, GValue *value,
 {
 	GLibLocker lock(GST_OBJECT(object));
 	GstLibcameraSrc *self = GST_LIBCAMERA_SRC(object);
+	GstLibcameraSrcState *state = self->state;
 
 	switch (prop_id) {
 	case PROP_CAMERA_NAME:
 		g_value_set_string(value, self->camera_name);
 		break;
 	default:
-		G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+		if (!state->controls_.getProperty(prop_id - PROP_LAST, value, pspec))
+			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 		break;
 	}
 }
@@ -934,4 +944,6 @@ gst_libcamera_src_class_init(GstLibcameraSrcClass *klass)
 							     | G_PARAM_READWRITE
 							     | G_PARAM_STATIC_STRINGS));
 	g_object_class_install_property(object_class, PROP_CAMERA_NAME, spec);
+
+	GstCameraControls::installProperties(object_class, PROP_LAST);
 }
