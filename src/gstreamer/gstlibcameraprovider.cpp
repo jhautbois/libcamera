@@ -34,6 +34,7 @@ GST_DEBUG_CATEGORY_STATIC(provider_debug);
 enum {
 	PROP_DEVICE_NAME = 1,
 	PROP_AUTO_FOCUS_MODE = 2,
+	PROP_AWB_MODE = 3,
 };
 
 #define GST_TYPE_LIBCAMERA_DEVICE gst_libcamera_device_get_type()
@@ -44,6 +45,7 @@ struct _GstLibcameraDevice {
 	GstDevice parent;
 	gchar *name;
 	controls::AfModeEnum auto_focus_mode = controls::AfModeManual;
+	controls::AwbModeEnum awb_mode = controls::AwbAuto;
 };
 
 G_DEFINE_TYPE(GstLibcameraDevice, gst_libcamera_device, GST_TYPE_DEVICE)
@@ -61,6 +63,7 @@ gst_libcamera_device_create_element(GstDevice *device, const gchar *name)
 
 	g_object_set(source, "camera-name", GST_LIBCAMERA_DEVICE(device)->name, nullptr);
 	g_object_set(source, "auto-focus-mode", GST_LIBCAMERA_DEVICE(device)->auto_focus_mode, nullptr);
+	g_object_set(source, "awb-mode", GST_LIBCAMERA_DEVICE(device)->awb_mode, nullptr);
 
 	return source;
 }
@@ -89,6 +92,9 @@ gst_libcamera_device_set_property(GObject *object, guint prop_id,
 		break;
 	case PROP_AUTO_FOCUS_MODE:
 		device->auto_focus_mode = static_cast<controls::AfModeEnum>(g_value_get_enum(value));
+		break;
+	case PROP_AWB_MODE:
+		device->awb_mode = static_cast<controls::AwbModeEnum>(g_value_get_enum(value));
 		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -138,6 +144,18 @@ gst_libcamera_device_class_init(GstLibcameraDeviceClass *klass)
 				  static_cast<gint>(controls::AfModeManual),
 				  G_PARAM_WRITABLE);
 	g_object_class_install_property(object_class, PROP_AUTO_FOCUS_MODE, pspec);
+
+	pspec = g_param_spec_enum("auto-white-balance-mode",
+				  "Set auto-white-balance mode",
+				  "Available options: AwbAuto, "
+				  "AwbIncandescent, AwbTungsten, "
+				  "AwbFluorescent, AwbIndoor, "
+				  "AwbDaylight, AwbSunset, AwbCloudy, "
+				  "AwbShade, AwbFlash, AwbHorizon.",
+				  gst_libcamera_auto_white_balance_get_type(),
+				  static_cast<gint>(controls::AwbAuto),
+				  G_PARAM_WRITABLE);
+	g_object_class_install_property(object_class, PROP_AWB_MODE, pspec);
 }
 
 static GstDevice *

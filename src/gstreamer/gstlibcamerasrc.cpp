@@ -143,6 +143,7 @@ struct _GstLibcameraSrc {
 
 	gchar *camera_name;
 	controls::AfModeEnum auto_focus_mode = controls::AfModeManual;
+	controls::AwbModeEnum auto_white_balance_mode = controls::AwbAuto;
 
 	std::atomic<GstEvent *> pending_eos;
 
@@ -155,6 +156,7 @@ enum {
 	PROP_0,
 	PROP_CAMERA_NAME,
 	PROP_AUTO_FOCUS_MODE,
+	PROP_AWB_MODE,
 };
 
 G_DEFINE_TYPE_WITH_CODE(GstLibcameraSrc, gst_libcamera_src, GST_TYPE_ELEMENT,
@@ -669,6 +671,18 @@ gst_libcamera_src_task_enter(GstTask *task, [[maybe_unused]] GThread *thread,
 		}
 	}
 
+	if (self->auto_white_balance_mode != controls::AwbAuto) {
+		const ControlInfoMap &infoMap = state->cam_->controls();
+		if (infoMap.find(&controls::AwbMode) != infoMap.end()) {
+			state->initControls_.set(controls::AwbMode, self->auto_white_balance_mode);
+		} else {
+			GST_ELEMENT_ERROR(self, RESOURCE, SETTINGS,
+					  ("Failed to enable auto white balance"),
+					  ("AwbMode not supported by this camera, "
+					   "please retry with 'auto-white-balance-mode=AwbAuto'"));
+		}
+	}
+
 	ret = state->cam_->start(&state->initControls_);
 	if (ret) {
 		GST_ELEMENT_ERROR(self, RESOURCE, SETTINGS,
@@ -739,6 +753,9 @@ gst_libcamera_src_set_property(GObject *object, guint prop_id,
 	case PROP_AUTO_FOCUS_MODE:
 		self->auto_focus_mode = static_cast<controls::AfModeEnum>(g_value_get_enum(value));
 		break;
+	case PROP_AWB_MODE:
+		self->auto_white_balance_mode = static_cast<controls::AwbModeEnum>(g_value_get_enum(value));
+		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 		break;
@@ -758,6 +775,9 @@ gst_libcamera_src_get_property(GObject *object, guint prop_id, GValue *value,
 		break;
 	case PROP_AUTO_FOCUS_MODE:
 		g_value_set_enum(value, static_cast<gint>(self->auto_focus_mode));
+		break;
+	case PROP_AWB_MODE:
+		g_value_set_enum(value, static_cast<gint>(self->auto_white_balance_mode));
 		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -963,4 +983,16 @@ gst_libcamera_src_class_init(GstLibcameraSrcClass *klass)
 				 static_cast<gint>(controls::AfModeManual),
 				 G_PARAM_WRITABLE);
 	g_object_class_install_property(object_class, PROP_AUTO_FOCUS_MODE, spec);
+
+	spec = g_param_spec_enum("auto-white-balance-mode",
+				  "Set auto-white-balance mode",
+				  "Available options: AwbAuto, "
+				  "AwbIncandescent, AwbTungsten, "
+				  "AwbFluorescent, AwbIndoor, "
+				  "AwbDaylight, AwbSunset, AwbCloudy, "
+				  "AwbShade, AwbFlash, AwbHorizon.",
+				  gst_libcamera_auto_white_balance_get_type(),
+				  static_cast<gint>(controls::AwbAuto),
+				  G_PARAM_WRITABLE);
+	g_object_class_install_property(object_class, PROP_AWB_MODE, spec);
 }
