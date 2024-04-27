@@ -634,7 +634,7 @@ int CameraSensorRaw::initProperties()
 	properties_.set(properties::PixelArrayActiveAreas, { activeArea_ });
 
 	/* Color filter array pattern. */
-	uint32_t cfa;
+	uint32_t cfa = properties::draft::MONO;
 
 	switch (cfaPattern_) {
 	case BayerFormat::BGGR:
