@@ -48,6 +48,24 @@ ae_constraint_mode_get_type (void)
 	return ae_constraint_mode_type;
 }
 
+#define AF_MODE (af_mode_get_type())
+static const GEnumValue af_modes[] = {
+	{controls::AfModeManual, "Default AF mode", "manual"},
+	{controls::AfModeAuto, "Auto focus mode", "auto"},
+	{controls::AfModeContinuous, "Continuous focus mode", "continuous"},
+};
+
+static GType
+af_mode_get_type (void)
+{
+	static GType af_mode_type = 0;
+
+	if (!af_mode_type) {
+		af_mode_type = g_enum_register_static ("AfMode", af_modes);
+	}
+	return af_mode_type;
+}
+
 #define AE_EXPOSURE_MODE (ae_exposure_mode_get_type())
 static const GEnumValue ae_exposure_modes[] = {
 	{controls::ExposureNormal, "Default exposure mode", "normal"},
@@ -191,6 +209,17 @@ void GstCameraControls::installProperties(GObjectClass *klass, int lastPropId)
 				      (GParamFlags)(GST_PARAM_CONTROLLABLE
 						    | G_PARAM_READWRITE
 						    | G_PARAM_STATIC_STRINGS)));
+
+	g_object_class_install_property (klass, lastPropId + AfMode,
+		g_param_spec_enum ("af-mode", "Auto Focus Mode",
+				   "Specify the auto focus mode to use. The auto focus modes determine "
+				   "how the AF algorithm behaves. AF modes may be platform specific, and "
+				   "not all AF modes may be supported.",
+				   AF_MODE,
+				   controls::AfModeManual,
+				   (GParamFlags)(GST_PARAM_CONTROLLABLE
+						 | G_PARAM_READWRITE
+						 | G_PARAM_STATIC_STRINGS)));
 
 	g_object_class_install_property (klass, lastPropId + AeExposureMode,
 		g_param_spec_enum ("ae-exposure-mode", "Exposure Mode",
@@ -354,6 +383,12 @@ bool GstCameraControls::getProperty(guint propId, GValue *value, GParamSpec *psp
 				    val.value_or(spec->default_value));
 		return true;
 	}
+	case AfMode: {
+		auto val = controls_.get(controls::AfMode);
+		auto spec = G_PARAM_SPEC_ENUM(pspec);
+		g_value_set_enum(value, val.value_or(spec->default_value));
+		return true;
+	}
 	case AeExposureMode: {
 		auto val = controls_.get(controls::AeExposureMode);
 		auto spec = G_PARAM_SPEC_ENUM(pspec);
@@ -467,6 +502,10 @@ bool GstCameraControls::setProperty(guint propId, const GValue *value,
 	case AeEnable:
 		controls_.set(controls::AeEnable,
 			g_value_get_boolean(value));
+		return true;
+	case AfMode:
+		controls_.set(controls::AfMode,
+			      g_value_get_int(value));
 		return true;
 	case AeExposureMode:
 		controls_.set(controls::AeExposureMode,

@@ -26,7 +26,7 @@ public:
 		AeExposureTime,
 		AeExposureValue,
 		AeMeteringMode,
-		AutoFocusMode,
+		AfMode,
 		AwbColorGainBlue,
 		AwbColorGainRed,
 		AwbEnable,
