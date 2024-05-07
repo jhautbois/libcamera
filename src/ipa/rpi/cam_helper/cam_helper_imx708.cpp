@@ -219,7 +219,7 @@ void CamHelperImx708::getDelays(int &exposureDelay, int &gainDelay,
 
 bool CamHelperImx708::sensorEmbeddedDataPresent() const
 {
-	return true;
+	return false;
 }
 
 double CamHelperImx708::getModeSensitivity(const CameraMode &mode) const
